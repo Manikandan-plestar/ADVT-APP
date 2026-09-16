@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
+import '../services/location_service.dart';
 
 class MyProfileScreen extends StatefulWidget {
   const MyProfileScreen({super.key});
@@ -11,6 +12,7 @@ class MyProfileScreen extends StatefulWidget {
 
 class _MyProfileScreenState extends State<MyProfileScreen> {
   bool _isEditing = false;
+  bool _isFetchingAddress = false;
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
   late TextEditingController _emailController;
@@ -33,6 +35,60 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     _emailController.dispose();
     _addressController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchAddress() async {
+    if (_isFetchingAddress) return;
+
+    setState(() {
+      _isFetchingAddress = true;
+    });
+
+    try {
+      final locService = Provider.of<LocationService>(context, listen: false);
+      final hasPermission = await locService.requestPermission();
+      if (!hasPermission) {
+        if (mounted) {
+          setState(() {
+            _isFetchingAddress = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location permission is required to fetch your address.'),
+              backgroundColor: Color(0xFFDC2626),
+            ),
+          );
+        }
+        return;
+      }
+
+      final loc = await locService.getCurrentLocation();
+      if (mounted) {
+        setState(() {
+          _addressController.text = loc.formattedAddress;
+          _isFetchingAddress = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isFetchingAddress = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to retrieve address. Please try again.'),
+            backgroundColor: Color(0xFFDC2626),
+          ),
+        );
+      }
+    }
+  }
+
+  void _clearAddress() {
+    if (_isFetchingAddress) return;
+    setState(() {
+      _addressController.clear();
+    });
   }
 
   void _saveChanges() {
@@ -178,9 +234,164 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                     const SizedBox(height: 6),
                     TextField(
                       controller: _addressController,
+                      readOnly: true,
+                      onTap: _isFetchingAddress ? null : _fetchAddress,
                       maxLines: 2,
-                      decoration: _inputDecoration(),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF111827),
+                        fontWeight: FontWeight.w500,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Tap here or "Get Address" to fetch location...',
+                        hintStyle: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF9CA3AF),
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF9FAFB),
+                        prefixIcon: const Icon(
+                          Icons.location_on_outlined,
+                          size: 20,
+                          color: Color(0xFF4F46E5),
+                        ),
+                        suffixIcon: _isFetchingAddress
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFF4F46E5),
+                                  ),
+                                ),
+                              )
+                            : null,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.5)),
+                      ),
                     ),
+                    const SizedBox(height: 8),
+
+                    // Text Actions below Address field: Get Address (Left) & Clear (Right)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        InkWell(
+                          onTap: _isFetchingAddress ? null : _fetchAddress,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_isFetchingAddress) ...[
+                                  const SizedBox(
+                                    width: 13,
+                                    height: 13,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFF4F46E5),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    'Fetching Address...',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF4F46E5),
+                                    ),
+                                  ),
+                                ] else ...[
+                                  const Icon(
+                                    Icons.my_location_rounded,
+                                    size: 15,
+                                    color: Color(0xFF4F46E5),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  const Text(
+                                    'Get Address',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF4F46E5),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: _isFetchingAddress ? null : _clearAddress,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.close_rounded,
+                                  size: 15,
+                                  color: _isFetchingAddress
+                                      ? const Color(0xFFD1D5DB)
+                                      : const Color(0xFFEF4444),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Clear',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: _isFetchingAddress
+                                        ? const Color(0xFFD1D5DB)
+                                        : const Color(0xFFEF4444),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    if (_isFetchingAddress) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEEF2FF),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Row(
+                          children: [
+                            SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF4F46E5),
+                              ),
+                            ),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Retrieving current location and address details...',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF4338CA),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 24),
 
                     Row(

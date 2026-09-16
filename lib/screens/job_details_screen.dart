@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/post_service.dart';
 import '../services/business_service.dart';
+import '../widgets/business/cycling_post_image.dart';
 import '../widgets/detail/route_map.dart';
 
 class JobDetailsScreen extends StatefulWidget {
@@ -221,6 +222,16 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                     style: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
                   ),
                   const SizedBox(height: 16),
+
+                  if (post.images.isNotEmpty) ...[
+                    CyclingPostImage(
+                      images: post.images,
+                      height: 180,
+                      borderRadius: BorderRadius.circular(16),
+                      interval: const Duration(seconds: 5),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   const Divider(height: 1, color: Color(0xFFF3F4F6)),
                   const SizedBox(height: 14),

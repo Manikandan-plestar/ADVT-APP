@@ -34,10 +34,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     try {
       final locService = Provider.of<LocationService>(context, listen: false);
+      
+      // Request location permission
+      final hasPermission = await locService.requestPermission();
+      if (!hasPermission) {
+        if (mounted) {
+          setState(() {
+            _isFetchingAddress = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location permission is required to fetch your address.'),
+              backgroundColor: Color(0xFFDC2626),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Fetch location and reverse geocode
       final loc = await locService.getCurrentLocation();
       if (mounted) {
         setState(() {
-          _addressController.text = "${loc.area}, ${loc.city}, ${loc.state}";
+          _addressController.text = loc.formattedAddress;
           _isFetchingAddress = false;
         });
       }
@@ -47,13 +66,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
           _isFetchingAddress = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to retrieve address. Please try again.')),
+          const SnackBar(
+            content: Text('Failed to retrieve address. Please check location settings and try again.'),
+            backgroundColor: Color(0xFFDC2626),
+          ),
         );
       }
     }
   }
 
   void _clearAddress() {
+    if (_isFetchingAddress) return;
     setState(() {
       _addressController.clear();
     });
@@ -164,66 +187,142 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 14),
 
                 // Address Input (Read-only)
-                const Text('Address', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+                const Text(
+                  'Address',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF374151),
+                  ),
+                ),
                 const SizedBox(height: 6),
                 TextField(
                   controller: _addressController,
                   readOnly: true,
-                  onTap: _fetchAddress,
+                  onTap: _isFetchingAddress ? null : _fetchAddress,
                   maxLines: 2,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF111827),
+                    fontWeight: FontWeight.w500,
+                  ),
                   decoration: InputDecoration(
-                    hintText: 'Tap "Get Address" to fetch location...',
+                    hintText: 'Tap here or "Get Address" to fetch location...',
+                    hintStyle: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF9CA3AF),
+                    ),
                     filled: true,
-                    fillColor: const Color(0xFFF3F4F6),
-                    prefixIcon: const Icon(Icons.location_on_outlined, size: 18, color: Color(0xFF4F46E5)),
+                    fillColor: const Color(0xFFF9FAFB),
+                    prefixIcon: const Icon(
+                      Icons.location_on_outlined,
+                      size: 20,
+                      color: Color(0xFF4F46E5),
+                    ),
+                    suffixIcon: _isFetchingAddress
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF4F46E5),
+                              ),
+                            ),
+                          )
+                        : null,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
 
-                // Address Action Buttons: Get Address & Clear
+                // Text Actions below Address field: Get Address (Left) & Clear (Right)
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _isFetchingAddress ? null : _fetchAddress,
-                        icon: _isFetchingAddress
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                              )
-                            : const Icon(Icons.my_location_rounded, size: 16),
-                        label: Text(_isFetchingAddress ? 'Fetching...' : 'Get Address'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF4F46E5),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 0,
+                    InkWell(
+                      onTap: _isFetchingAddress ? null : _fetchAddress,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_isFetchingAddress) ...[
+                              const SizedBox(
+                                width: 13,
+                                height: 13,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Color(0xFF4F46E5),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              const Text(
+                                'Fetching Address...',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF4F46E5),
+                                ),
+                              ),
+                            ] else ...[
+                              const Icon(
+                                Icons.my_location_rounded,
+                                size: 15,
+                                color: Color(0xFF4F46E5),
+                              ),
+                              const SizedBox(width: 5),
+                              const Text(
+                                'Get Address',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF4F46E5),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    OutlinedButton.icon(
-                      onPressed: _clearAddress,
-                      icon: const Icon(Icons.clear_rounded, size: 16, color: Color(0xFFEF4444)),
-                      label: const Text('Clear', style: TextStyle(color: Color(0xFFEF4444))),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        side: const BorderSide(color: Color(0xFFFCA5A5)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    InkWell(
+                      onTap: _isFetchingAddress ? null : _clearAddress,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                        child: Text(
+                          'Clear',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _isFetchingAddress
+                                ? const Color(0xFFD1D5DB)
+                                : const Color(0xFFEF4444),
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
 
                 if (_isFetchingAddress) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
                       color: const Color(0xFFEEF2FF),
                       borderRadius: BorderRadius.circular(12),
@@ -231,15 +330,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: const Row(
                       children: [
                         SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF4F46E5)),
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFF4F46E5),
+                          ),
                         ),
                         SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             'Retrieving current location and address details...',
-                            style: TextStyle(fontSize: 11, color: Color(0xFF4338CA), fontWeight: FontWeight.w500),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF4338CA),
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ],

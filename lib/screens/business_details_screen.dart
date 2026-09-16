@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/business_service.dart';
 import '../services/post_service.dart';
+import '../widgets/business/cycling_business_image.dart';
 
 class BusinessDetailsScreen extends StatelessWidget {
   final String businessProfileId;
@@ -27,94 +28,121 @@ class BusinessDetailsScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF8FAFC),
       body: SingleChildScrollView(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Cover Gradient Banner with Overlay Avatar & Follow Button
+            // 1. BUSINESS IMAGE - FULL WIDTH AT TOP (Order #1)
             Stack(
-              clipBehavior: Clip.none,
               children: [
-                Container(
-                  height: 140,
+                // Full-width Image Carousel / Hero Display
+                SizedBox(
                   width: double.infinity,
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF6366F1), Color(0xFF9333EA)],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
+                  height: 250,
+                  child: CyclingBusinessImage(
+                    images: biz.images,
+                    width: double.infinity,
+                    height: 250,
+                    borderRadius: BorderRadius.zero,
+                    fit: BoxFit.cover,
                   ),
-                  child: SafeArea(
-                    child: Align(
-                      alignment: Alignment.topLeft,
-                      child: IconButton(
-                        icon: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: const BoxDecoration(
-                            color: Colors.black26,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
-                        ),
-                        onPressed: () => Navigator.pop(context),
+                ),
+
+                // Top Gradient Overlay for Back Button Visibility
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    height: 90,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.black54, Colors.transparent],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                       ),
                     ),
                   ),
                 ),
-                Positioned(
-                  bottom: -32,
-                  left: 20,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white, width: 4),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 8,
+
+                // Back Navigation Button
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: IconButton(
+                      icon: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          shape: BoxShape.circle,
                         ),
+                        child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+                ),
+
+                // Photo Count Badge (if multiple images exist)
+                if (biz.images.length > 1)
+                  Positioned(
+                    bottom: 12,
+                    right: 16,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 12),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${biz.images.length} photos • 3s',
+                            style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+
+            const SizedBox(height: 18),
+
+            // 2. SHOP NAME & FOLLOW ACTION (Order #2)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            biz.name,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF111827),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(Icons.verified_rounded, size: 18, color: Color(0xFF3B82F6)),
                       ],
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.network(
-                        biz.image,
-                        width: 72,
-                        height: 72,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Container(
-                            width: 72,
-                            height: 72,
-                            color: const Color(0xFFF3F4F6),
-                            child: const Center(
-                              child: SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFF4F46E5)),
-                              ),
-                            ),
-                          );
-                        },
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          width: 72,
-                          height: 72,
-                          color: const Color(0xFFEEF2FF),
-                          child: const Icon(Icons.store_rounded, color: Color(0xFF4F46E5)),
-                        ),
-                      ),
-                    ),
                   ),
-                ),
-                Positioned(
-                  bottom: -20,
-                  right: 20,
-                  child: ElevatedButton(
+                  const SizedBox(width: 10),
+                  ElevatedButton(
                     onPressed: () => bizService.toggleFollow(biz.businessProfileId),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: biz.isFollowed ? const Color(0xFFF3F4F6) : const Color(0xFF4F46E5),
                       foregroundColor: biz.isFollowed ? const Color(0xFF374151) : Colors.white,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                     child: Text(
@@ -122,39 +150,82 @@ class BusinessDetailsScreen extends StatelessWidget {
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
 
-            const SizedBox(height: 44),
+            const SizedBox(height: 10),
 
-            // Business Identity Section
+            // 3. SHOP DETAILS (Order #3)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        biz.name,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF111827)),
-                      ),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.verified_rounded, size: 16, color: Color(0xFF3B82F6)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${biz.category} • ${biz.location}',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    biz.about,
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF4B5563), height: 1.4),
-                  ),
-                ],
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFF3F4F6)),
+                  boxShadow: const [
+                    BoxShadow(color: Color(0x05000000), blurRadius: 8, offset: Offset(0, 2)),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Category
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEEF2FF),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            biz.category,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF4F46E5)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Address / Location
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.location_on_rounded, size: 16, color: Color(0xFFEF4444)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            biz.registeredAddress.isNotEmpty ? biz.registeredAddress : biz.location,
+                            style: const TextStyle(fontSize: 12.5, color: Color(0xFF4B5563), height: 1.3),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Business Phone Number
+                    Row(
+                      children: [
+                        const Icon(Icons.phone_rounded, size: 16, color: Color(0xFF4F46E5)),
+                        const SizedBox(width: 6),
+                        Text(
+                          biz.phone.isNotEmpty ? biz.phone : '+91 98402 12345',
+                          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Color(0xFF1F2937)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+
+                    // About Description
+                    Text(
+                      biz.about,
+                      style: const TextStyle(fontSize: 12.5, color: Color(0xFF6B7280), height: 1.4),
+                    ),
+                  ],
+                ),
               ),
             ),
 
@@ -162,7 +233,7 @@ class BusinessDetailsScreen extends StatelessWidget {
             const Divider(height: 1, color: Color(0xFFF3F4F6)),
             const SizedBox(height: 16),
 
-            // Recent Updates Section
+            // 4. POSTS / RECENT UPDATES (Order #4)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
@@ -170,7 +241,12 @@ class BusinessDetailsScreen extends StatelessWidget {
                 children: [
                   const Text(
                     'RECENT UPDATES',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF9CA3AF), letterSpacing: 0.5),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF9CA3AF),
+                      letterSpacing: 0.5,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   if (relatedPosts.isEmpty)
@@ -249,6 +325,7 @@ class BusinessDetailsScreen extends StatelessWidget {
                         );
                       },
                     ),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),

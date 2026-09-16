@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/post_service.dart';
+import '../business/cycling_post_image.dart';
 
 class OfferCard extends StatelessWidget {
   final PostItem item;
@@ -32,43 +33,22 @@ class OfferCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Banner Image with Overlay Badges
+          // Banner Image with 5-Second Cycling & Overlay Badges
           Stack(
             children: [
-              Container(
+              CyclingPostImage(
+                images: item.images,
                 height: 140,
-                width: double.infinity,
-                color: const Color(0xFFEEF2FF),
-                child: item.image != null && item.image!.isNotEmpty
-                    ? Image.network(
-                        item.image!,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Container(
-                            color: const Color(0xFFF3F4F6),
-                            child: const Center(
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF4F46E5)),
-                              ),
-                            ),
-                          );
-                        },
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: const Color(0xFFEEF2FF),
-                          child: const Center(
-                            child: Icon(Icons.local_offer_rounded, color: Color(0xFF4F46E5), size: 36),
-                          ),
-                        ),
-                      )
-                    : Container(
-                        color: const Color(0xFFEEF2FF),
-                        child: const Center(
-                          child: Icon(Icons.local_offer_rounded, color: Color(0xFF4F46E5), size: 36),
-                        ),
-                      ),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                interval: const Duration(seconds: 5),
+                emptyWidget: Container(
+                  height: 140,
+                  width: double.infinity,
+                  color: const Color(0xFFEEF2FF),
+                  child: const Center(
+                    child: Icon(Icons.local_offer_rounded, color: Color(0xFF4F46E5), size: 36),
+                  ),
+                ),
               ),
 
               // Discount Badge on Top-Left

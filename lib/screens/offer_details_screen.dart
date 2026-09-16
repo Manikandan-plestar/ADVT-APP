@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/post_service.dart';
 import '../services/business_service.dart';
+import '../widgets/business/cycling_post_image.dart';
 import '../widgets/detail/route_map.dart';
 
 class OfferDetailsScreen extends StatefulWidget {
@@ -221,34 +222,12 @@ class _OfferDetailsScreenState extends State<OfferDetailsScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  if (post.image != null && post.image!.isNotEmpty) ...[
-                    ClipRRect(
+                  if (post.images.isNotEmpty) ...[
+                    CyclingPostImage(
+                      images: post.images,
+                      height: 180,
                       borderRadius: BorderRadius.circular(16),
-                      child: Image.network(
-                        post.image!,
-                        height: 160,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Container(
-                            height: 160,
-                            width: double.infinity,
-                            color: const Color(0xFFF3F4F6),
-                            child: const Center(
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF4F46E5)),
-                            ),
-                          );
-                        },
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          height: 160,
-                          width: double.infinity,
-                          color: const Color(0xFFEEF2FF),
-                          child: const Center(
-                            child: Icon(Icons.local_offer_rounded, color: Color(0xFF4F46E5), size: 40),
-                          ),
-                        ),
-                      ),
+                      interval: const Duration(seconds: 5),
                     ),
                     const SizedBox(height: 16),
                   ],

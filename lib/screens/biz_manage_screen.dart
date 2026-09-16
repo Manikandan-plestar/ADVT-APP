@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/target_location_model.dart';
 import '../services/business_service.dart';
 import '../services/post_service.dart';
 import '../services/notification_service.dart';
 import '../widgets/business/create_post_modal.dart';
+import '../widgets/business/cycling_post_image.dart';
 
 class BizManageScreen extends StatelessWidget {
   const BizManageScreen({super.key});
@@ -24,6 +26,8 @@ class BizManageScreen extends StatelessWidget {
           required String subtitle,
           required String description,
           required String targetLocation,
+          List<TargetLocationModel>? targetLocations,
+          List<String>? images,
         }) async {
           final newPost = await postService.createPost(
             businessProfileId: bizId,
@@ -33,6 +37,8 @@ class BizManageScreen extends StatelessWidget {
             subtitle: subtitle,
             description: description,
             targetLocation: targetLocation,
+            targetLocationItems: targetLocations,
+            images: images,
           );
 
           bizService.addPostToBusiness(bizId, newPost);
@@ -194,45 +200,61 @@ class BizManageScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(color: const Color(0xFFF3F4F6)),
                     ),
-                    padding: const EdgeInsets.all(14),
+                    clipBehavior: Clip.antiAlias,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: isJob ? const Color(0xFFEEF2FF) : const Color(0xFFFFFBEB),
-                                borderRadius: BorderRadius.circular(20),
+                        // If post has images, display cycling post images with 5s interval
+                        if (post.images.isNotEmpty)
+                          CyclingPostImage(
+                            images: post.images,
+                            height: 120,
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+                            interval: const Duration(seconds: 5),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: isJob ? const Color(0xFFEEF2FF) : const Color(0xFFFFFBEB),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      isJob ? 'JOB LISTING' : 'OFFER / DEAL',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: isJob ? const Color(0xFF4F46E5) : const Color(0xFFD97706),
+                                      ),
+                                    ),
+                                  ),
+                                  const Text('Live', style: TextStyle(fontSize: 10, color: Color(0xFF9CA3AF))),
+                                ],
                               ),
-                              child: Text(
-                                isJob ? 'JOB LISTING' : 'OFFER / DEAL',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: isJob ? const Color(0xFF4F46E5) : const Color(0xFFD97706),
-                                ),
+                              const SizedBox(height: 8),
+                              Text(
+                                post.title,
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF111827)),
                               ),
-                            ),
-                            const Text('Live', style: TextStyle(fontSize: 10, color: Color(0xFF9CA3AF))),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          post.title,
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF111827)),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          post.subtitle,
-                          style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          post.description,
-                          style: const TextStyle(fontSize: 11, color: Color(0xFF4B5563)),
+                              const SizedBox(height: 2),
+                              Text(
+                                post.subtitle,
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                post.description,
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF4B5563)),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../models/target_location_model.dart';
 
 class PostItem {
   final String postId;
@@ -10,11 +11,12 @@ class PostItem {
   final String description;
   final String? exp;
   final String? jobType;
-  final String? image;
+  final List<String> images; // Ordered list of post images
   final String? validity;
   final String? discount;
   final String timeAgo;
   final String? targetLocation;
+  final List<TargetLocationModel>? targetLocationItems;
   bool isSaved;
 
   PostItem({
@@ -27,13 +29,20 @@ class PostItem {
     required this.description,
     this.exp,
     this.jobType,
-    this.image,
+    String? image,
+    List<String>? images,
     this.validity,
     this.discount,
     required this.timeAgo,
     this.targetLocation,
+    this.targetLocationItems,
     this.isSaved = false,
-  });
+  }) : images = (images != null && images.isNotEmpty)
+            ? images
+            : (image != null && image.isNotEmpty ? [image] : []);
+
+  /// Backward compatibility getter for single-image references
+  String? get image => images.isNotEmpty ? images.first : null;
 }
 
 class PostService extends ChangeNotifier {
@@ -48,7 +57,10 @@ class PostService extends ChangeNotifier {
       description: "We provide quality dental care and regular dental checkups. Book your appointment today.",
       discount: "CHECKUP DEAL",
       validity: "Booking Open",
-      image: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=600&q=80",
+      images: [
+        "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=600&q=80",
+      ],
       timeAgo: "1 hour ago",
       targetLocation: "Tirunelveli",
       isSaved: false,
@@ -65,6 +77,7 @@ class PostService extends ChangeNotifier {
       jobType: "Full Time",
       timeAgo: "2 hours ago",
       targetLocation: "Madurai",
+      images: [],
       isSaved: false,
     ),
     PostItem(
@@ -77,7 +90,9 @@ class PostService extends ChangeNotifier {
       description: "We provide reliable electrical installation, repair, and maintenance services.",
       discount: "SERVICE DEAL",
       validity: "Active Service",
-      image: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80",
+      images: [
+        "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80",
+      ],
       timeAgo: "3 hours ago",
       targetLocation: "Nagercoil",
       isSaved: false,
@@ -126,8 +141,14 @@ class PostService extends ChangeNotifier {
     required String subtitle,
     required String description,
     String? image,
+    List<String>? images,
     String? targetLocation,
+    List<TargetLocationModel>? targetLocationItems,
   }) async {
+    final selectedImages = (images != null && images.isNotEmpty)
+        ? images
+        : (image != null && image.isNotEmpty ? [image] : <String>[]);
+
     final newPost = PostItem(
       postId: DateTime.now().millisecondsSinceEpoch.toString(),
       businessProfileId: businessProfileId,
@@ -139,10 +160,11 @@ class PostService extends ChangeNotifier {
       exp: type == 'job' ? "Open" : null,
       jobType: type == 'job' ? "Full Time" : null,
       timeAgo: "Just now",
-      image: image,
+      images: selectedImages,
       validity: type == 'offer' ? "Active now" : null,
       discount: type == 'offer' ? "SPECIAL DEAL" : null,
       targetLocation: targetLocation,
+      targetLocationItems: targetLocationItems,
       isSaved: false,
     );
 

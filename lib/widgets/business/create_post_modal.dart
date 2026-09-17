@@ -126,6 +126,7 @@ class _CreatePostModalState extends State<CreatePostModal> {
   @override
   Widget build(BuildContext context) {
     final isJob = widget.postType == 'job';
+    final isCoupon = widget.postType == 'coupon';
 
     return Container(
       decoration: const BoxDecoration(
@@ -148,7 +149,9 @@ class _CreatePostModalState extends State<CreatePostModal> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  isJob ? 'Post a New Job' : 'Create Special Offer',
+                  isJob
+                      ? 'Post a New Job'
+                      : (isCoupon ? 'Publish a Coupon' : 'Create Special Offer'),
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -164,9 +167,9 @@ class _CreatePostModalState extends State<CreatePostModal> {
             const SizedBox(height: 16),
 
             // Title Input
-            const Text(
-              'Title',
-              style: TextStyle(
+            Text(
+              isCoupon ? 'Offer / Discount Headline' : 'Title',
+              style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF4B5563),
@@ -178,7 +181,9 @@ class _CreatePostModalState extends State<CreatePostModal> {
               decoration: InputDecoration(
                 hintText: isJob
                     ? 'e.g. Graphic Designer Needed'
-                    : 'e.g. Flat 30% Off Mobile Accessories',
+                    : (isCoupon
+                        ? 'e.g. Flat 50% Off / Only for ₹299'
+                        : 'e.g. Flat 30% Off Mobile Accessories'),
                 hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
                 filled: true,
                 fillColor: const Color(0xFFF9FAFB),
@@ -196,9 +201,9 @@ class _CreatePostModalState extends State<CreatePostModal> {
             const SizedBox(height: 14),
 
             // Subtitle Input
-            const Text(
-              'Tagline / Subtitle',
-              style: TextStyle(
+            Text(
+              isCoupon ? 'Product / Deal Tagline' : 'Tagline / Subtitle',
+              style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF4B5563),
@@ -210,7 +215,9 @@ class _CreatePostModalState extends State<CreatePostModal> {
               decoration: InputDecoration(
                 hintText: isJob
                     ? 'e.g. 1-2 Years Exp • Full Time'
-                    : 'e.g. Valid till Sunday • Coupon: FESTIVE',
+                    : (isCoupon
+                        ? 'e.g. Deep Bass Earbuds | Code: SAVE50'
+                        : 'e.g. Valid till Sunday • Coupon: FESTIVE'),
                 hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
                 filled: true,
                 fillColor: const Color(0xFFF9FAFB),
@@ -228,9 +235,9 @@ class _CreatePostModalState extends State<CreatePostModal> {
             const SizedBox(height: 14),
 
             // Description Input
-            const Text(
-              'Detailed Description',
-              style: TextStyle(
+            Text(
+              isCoupon ? 'Description & Terms' : 'Detailed Description',
+              style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF4B5563),
@@ -241,7 +248,9 @@ class _CreatePostModalState extends State<CreatePostModal> {
               controller: _descController,
               maxLines: 3,
               decoration: InputDecoration(
-                hintText: 'Add specifics, requirements, or offer terms...',
+                hintText: isCoupon
+                    ? 'Add coupon specifics, validity terms, or redemption steps...'
+                    : 'Add specifics, requirements, or offer terms...',
                 hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
                 filled: true,
                 fillColor: const Color(0xFFF9FAFB),

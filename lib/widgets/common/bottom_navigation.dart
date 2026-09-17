@@ -66,10 +66,10 @@ class CustomBottomNavigation extends StatelessWidget {
                       ),
                       // Spacer for center elevated (+) button
                       const SizedBox(width: 56),
-                      // Item 2: Followed
+                      // Item 2: Coupons
                       _buildNavItem(
-                        icon: Icons.how_to_reg_rounded,
-                        label: 'Followed',
+                        icon: Icons.confirmation_number_rounded,
+                        label: 'Coupons',
                         isActive: currentIndex == 2,
                         activeColor: activeColor,
                         inactiveColor: inactiveColor,

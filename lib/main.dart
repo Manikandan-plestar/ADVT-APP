@@ -29,6 +29,8 @@ import 'screens/profile_screen.dart';
 import 'screens/my_profile_screen.dart';
 import 'screens/followed_screen.dart';
 import 'screens/saved_items_screen.dart';
+import 'screens/coupons_screen.dart';
+import 'screens/coupon_details_screen.dart';
 import 'screens/settings_screen.dart';
 
 void main() {
@@ -97,6 +99,11 @@ class AdvtApp extends StatelessWidget {
             case '/offer-details':
               final postId = settings.arguments as String? ?? '2';
               return MaterialPageRoute(builder: (_) => OfferDetailsScreen(postId: postId));
+            case '/coupon-details':
+              final postId = settings.arguments as String? ?? 'C001';
+              return MaterialPageRoute(builder: (_) => CouponDetailsScreen(postId: postId));
+            case '/coupons':
+              return MaterialPageRoute(builder: (_) => const CouponsScreen());
             case '/business-details':
               final bizId = settings.arguments as String? ?? 'BP001';
               return MaterialPageRoute(builder: (_) => BusinessDetailsScreen(businessProfileId: bizId));

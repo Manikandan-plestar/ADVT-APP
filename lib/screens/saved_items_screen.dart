@@ -44,6 +44,7 @@ class SavedItemsScreen extends StatelessWidget {
                 itemBuilder: (context, index) {
                   final item = savedList[index];
                   final isJob = item.type == 'job';
+                  final isCoupon = item.type == 'coupon';
                   return Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -66,6 +67,8 @@ class SavedItemsScreen extends StatelessWidget {
                             onTap: () {
                               if (isJob) {
                                 Navigator.pushNamed(context, '/job-details', arguments: item.postId);
+                              } else if (isCoupon) {
+                                Navigator.pushNamed(context, '/coupon-details', arguments: item.postId);
                               } else {
                                 Navigator.pushNamed(context, '/offer-details', arguments: item.postId);
                               }
@@ -76,7 +79,9 @@ class SavedItemsScreen extends StatelessWidget {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: isJob ? const Color(0xFFEEF2FF) : const Color(0xFFFFFBEB),
+                                    color: isJob
+                                        ? const Color(0xFFEEF2FF)
+                                        : (isCoupon ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB)),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
@@ -84,7 +89,9 @@ class SavedItemsScreen extends StatelessWidget {
                                     style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
-                                      color: isJob ? const Color(0xFF4F46E5) : const Color(0xFFD97706),
+                                      color: isJob
+                                          ? const Color(0xFF4F46E5)
+                                          : (isCoupon ? const Color(0xFF047857) : const Color(0xFFD97706)),
                                     ),
                                   ),
                                 ),

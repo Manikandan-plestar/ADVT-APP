@@ -12,7 +12,7 @@ import '../widgets/home/post_card.dart';
 import '../widgets/home/filter_dropdown.dart';
 import '../widgets/business/select_profile_modal.dart';
 import 'search_screen.dart';
-import 'followed_screen.dart';
+import 'coupons_screen.dart';
 import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -62,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
         child: Stack(
@@ -71,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildHomeFeedTab(),
                 const SearchScreen(),
-                const FollowedScreen(),
+                const CouponsScreen(),
                 const ProfileScreen(),
               ],
             ),
@@ -267,7 +268,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        icon: const Icon(Icons.tune_rounded, color: Colors.white, size: 18),
+                        icon: const Icon(Icons.filter_alt_rounded, color: Colors.white, size: 19),
                       ),
                     ],
                   ),

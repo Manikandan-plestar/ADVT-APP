@@ -44,7 +44,9 @@ class BizManageScreen extends StatelessWidget {
           bizService.addPostToBusiness(bizId, newPost);
 
           notifService.addNotification(
-            title: postType == 'job' ? 'New Job Opening' : 'Special Offer Alert',
+            title: postType == 'job'
+                ? 'New Job Opening'
+                : (postType == 'coupon' ? 'New Coupon Published' : 'Special Offer Alert'),
             message: '$bizName published "$title" in $targetLocation.',
             type: postType,
           );
@@ -108,7 +110,7 @@ class BizManageScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Only Two Post Buttons (Compact & Direct)
+            // Three Direct Post Buttons (Job, Offer, Coupon)
             Row(
               children: [
                 Expanded(
@@ -118,14 +120,14 @@ class BizManageScreen extends StatelessWidget {
                       backgroundColor: const Color(0xFFEEF2FF),
                       foregroundColor: const Color(0xFF4338CA),
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    icon: const Icon(Icons.work_outline_rounded, size: 16),
-                    label: const Text('Post a Job', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    icon: const Icon(Icons.work_outline_rounded, size: 15),
+                    label: const Text('Job', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () => _openCreatePostModal(context, 'offer', activeBiz.businessProfileId, activeBiz.name),
@@ -133,11 +135,26 @@ class BizManageScreen extends StatelessWidget {
                       backgroundColor: const Color(0xFFFFFBEB),
                       foregroundColor: const Color(0xFFB45309),
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    icon: const Icon(Icons.local_offer_outlined, size: 16),
-                    label: const Text('Post an Offer', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    icon: const Icon(Icons.local_offer_outlined, size: 15),
+                    label: const Text('Offer', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _openCreatePostModal(context, 'coupon', activeBiz.businessProfileId, activeBiz.name),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFECFDF5),
+                      foregroundColor: const Color(0xFF047857),
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    icon: const Icon(Icons.confirmation_number_outlined, size: 15),
+                    label: const Text('Coupon', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -167,7 +184,7 @@ class BizManageScreen extends StatelessWidget {
                     ),
                     SizedBox(height: 4),
                     Text(
-                      'Use the buttons above to post job vacancies or discounts.',
+                      'Use the buttons above to post job vacancies, discounts, or coupons.',
                       style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
                     ),
                   ],
@@ -182,11 +199,15 @@ class BizManageScreen extends StatelessWidget {
                 itemBuilder: (context, index) {
                   final post = bizPosts[index];
                   final isJob = post.type == 'job';
+                  final isCoupon = post.type == 'coupon';
+
                   return InkWell(
                     borderRadius: BorderRadius.circular(18),
                     onTap: () {
                       if (isJob) {
                         Navigator.pushNamed(context, '/job-details', arguments: post.postId);
+                      } else if (isCoupon) {
+                        Navigator.pushNamed(context, '/coupon-details', arguments: post.postId);
                       } else {
                         Navigator.pushNamed(context, '/offer-details', arguments: post.postId);
                       }
@@ -227,15 +248,19 @@ class BizManageScreen extends StatelessWidget {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
                                       decoration: BoxDecoration(
-                                        color: isJob ? const Color(0xFFEEF2FF) : const Color(0xFFFFFBEB),
+                                        color: isJob
+                                            ? const Color(0xFFEEF2FF)
+                                            : (isCoupon ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB)),
                                         borderRadius: BorderRadius.circular(20),
                                       ),
                                       child: Text(
-                                        isJob ? 'JOB' : 'OFFER',
+                                        isJob ? 'JOB' : (isCoupon ? 'COUPON' : 'OFFER'),
                                         style: TextStyle(
                                           fontSize: 10,
                                           fontWeight: FontWeight.w800,
-                                          color: isJob ? const Color(0xFF4F46E5) : const Color(0xFFD97706),
+                                          color: isJob
+                                              ? const Color(0xFF4F46E5)
+                                              : (isCoupon ? const Color(0xFF047857) : const Color(0xFFD97706)),
                                           letterSpacing: 0.5,
                                         ),
                                       ),

@@ -101,7 +101,19 @@ class ProfileScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Option 3: Saved Posts
+            // Option 3: Followed Businesses
+            _buildProfileOption(
+              context,
+              title: 'Followed',
+              subtitle: 'Stores and businesses you actively track',
+              icon: Icons.how_to_reg_rounded,
+              iconColor: const Color(0xFF059669),
+              bgColor: const Color(0xFFECFDF5),
+              onTap: () => Navigator.pushNamed(context, '/followed'),
+            ),
+            const SizedBox(height: 12),
+
+            // Option 4: Saved Posts
             _buildProfileOption(
               context,
               title: 'Saved Posts',

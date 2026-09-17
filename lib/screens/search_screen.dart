@@ -34,6 +34,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final canPop = Navigator.canPop(context);
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         backgroundColor: Colors.white,

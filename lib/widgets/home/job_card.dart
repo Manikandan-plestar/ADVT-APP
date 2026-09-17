@@ -45,55 +45,27 @@ class JobCard extends StatelessWidget {
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                   interval: const Duration(seconds: 5),
                 ),
-                // Top Badges Overlay
+                // Only JOB Badge on Top-Left Corner
                 Positioned(
                   top: 10,
                   left: 10,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF059669),
-                      borderRadius: BorderRadius.circular(6),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black26, blurRadius: 4),
-                      ],
-                    ),
-                    child: Text(
-                      item.jobType ?? 'Full Time',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xCC312E81),
+                      color: const Color(0xFF4F46E5),
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: const [
-                        BoxShadow(color: Colors.black26, blurRadius: 4),
+                        BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 1)),
                       ],
                     ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.work_outline_rounded, size: 10, color: Colors.white),
-                        SizedBox(width: 4),
-                        Text(
-                          'JOB VACANCY',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
+                    child: const Text(
+                      'JOB',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
                 ),
@@ -105,51 +77,30 @@ class JobCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Badges Row (when no images exist)
+                // Top Badge (when no images exist)
                 if (!hasImages) ...[
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.start,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFECFDF5),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          item.jobType ?? 'Full Time',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF059669),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: const Color(0xFFEEF2FF),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.work_outline_rounded, size: 12, color: Color(0xFF4F46E5)),
-                            SizedBox(width: 4),
-                            Text(
-                              'JOB VACANCY',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF4F46E5),
-                              ),
-                            ),
-                          ],
+                        child: const Text(
+                          'JOB',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF4F46E5),
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                 ],
 
                 // Main Info Row
@@ -211,61 +162,62 @@ class JobCard extends StatelessWidget {
 
                 // Bottom Action Row
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Text(
-                      item.timeAgo,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Color(0xFF9CA3AF),
+                    OutlinedButton(
+                      onPressed: onView,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF4F46E5),
+                        side: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'View Job',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ),
-                    Row(
-                      children: [
-                        OutlinedButton(
-                          onPressed: onView,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF4F46E5),
-                            side: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            'View Job',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: onToggleSave,
+                      style: TextButton.styleFrom(
+                        foregroundColor: item.isSaved ? const Color(0xFF4F46E5) : const Color(0xFF4B5563),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      icon: Icon(
+                        item.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                        size: 16,
+                        color: item.isSaved ? const Color(0xFF4F46E5) : const Color(0xFF4B5563),
+                      ),
+                      label: Text(
+                        item.isSaved ? 'Saved' : 'Save',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: item.isSaved ? const Color(0xFF4F46E5) : const Color(0xFF4B5563),
                         ),
-                        const SizedBox(width: 8),
-                        TextButton.icon(
-                          onPressed: onToggleSave,
-                          style: TextButton.styleFrom(
-                            foregroundColor: item.isSaved ? const Color(0xFF4F46E5) : const Color(0xFF4B5563),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          icon: Icon(
-                            item.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                            size: 16,
-                            color: item.isSaved ? const Color(0xFF4F46E5) : const Color(0xFF4B5563),
-                          ),
-                          label: Text(
-                            item.isSaved ? 'Saved' : 'Save',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: item.isSaved ? const Color(0xFF4F46E5) : const Color(0xFF4B5563),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.bottomRight,
+                  child: Text(
+                    item.formattedPostTime,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF9CA3AF),
+                    ),
+                  ),
                 ),
               ],
             ),

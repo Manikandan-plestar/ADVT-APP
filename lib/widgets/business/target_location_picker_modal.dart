@@ -30,12 +30,10 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
 
   // Search state
   List<TargetLocationModel> _searchResults = [];
+  List<TargetLocationModel> _searchNearbyLocations = [];
+  List<TargetLocationModel> _searchCoveredLocations = [];
   bool _isSearching = false;
   Timer? _debounce;
-
-  // Dynamic Nearby Locations
-  List<TargetLocationModel> _nearbyLocations = [];
-  bool _isLoadingNearby = false;
 
   @override
   void initState() {
@@ -44,9 +42,7 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
     if (_selectedLocations.isNotEmpty) {
       _activeReferenceLocation = _selectedLocations.last;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadNearbyForActiveReference();
-    });
+    // Do NOT automatically preload or select any default location (Requirements #1 & #2)
   }
 
   @override
@@ -57,58 +53,12 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
   }
 
   // ==========================================
-  // DYNAMIC NEARBY LOCATIONS LOADER
-  // ==========================================
-
-  Future<void> _loadNearbyForActiveReference() async {
-    if (_isLoadingNearby) return;
-
-    setState(() => _isLoadingNearby = true);
-
-    final locService = Provider.of<LocationService>(context, listen: false);
-    final userLat = locService.currentLocation.latitude != 0.0 ? locService.currentLocation.latitude : null;
-    final userLng = locService.currentLocation.longitude != 0.0 ? locService.currentLocation.longitude : null;
-
-    try {
-      List<TargetLocationModel> nearby = [];
-
-      if (_activeReferenceLocation != null) {
-        // Compute nearby locations relative to the active reference location's coordinates
-        nearby = await _locationService.getNearbyLocationsForReference(
-          referenceLocation: _activeReferenceLocation!,
-          limit: 15,
-        );
-      } else if (userLat != null && userLng != null) {
-        // Fallback to default locations sorted by user GPS location
-        nearby = _locationService.sortByProximity(
-          TargetLocationService.defaultLocations,
-          userLat: userLat,
-          userLng: userLng,
-        );
-      } else {
-        nearby = List.from(TargetLocationService.defaultLocations.take(12));
-      }
-
-      if (mounted) {
-        setState(() {
-          _nearbyLocations = nearby;
-          _isLoadingNearby = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoadingNearby = false);
-      }
-    }
-  }
-
-  // ==========================================
-  // SEARCH & AUTOCOMPLETE
+  // SEARCH & AUTOCOMPLETE WITH EXACT MATCH FIRST
   // ==========================================
 
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 280), () {
+    _debounce = Timer(const Duration(milliseconds: 250), () {
       _runSearch(query);
     });
   }
@@ -119,6 +69,8 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
       if (mounted) {
         setState(() {
           _searchResults = [];
+          _searchNearbyLocations = [];
+          _searchCoveredLocations = [];
           _isSearching = false;
         });
       }
@@ -139,9 +91,30 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
       userLng: userLng,
     );
 
+    List<TargetLocationModel> searchNearby = [];
+    List<TargetLocationModel> searchCovered = [];
+    if (results.isNotEmpty) {
+      final topResult = results.first;
+
+      // 1. Four (4) Nearby Areas (strictly proximity ranked, excluding covered/contained child locations)
+      searchNearby = await _locationService.getNearbyLocationsForReference(
+        referenceLocation: topResult,
+        limit: 4,
+        excludeLocations: _selectedLocations,
+      );
+
+      // 2. Covered Areas (geographically contained within or part of searched location)
+      searchCovered = await _locationService.getCoveredLocationsForReference(
+        referenceLocation: topResult,
+        limit: 15,
+      );
+    }
+
     if (mounted) {
       setState(() {
         _searchResults = results;
+        _searchNearbyLocations = searchNearby;
+        _searchCoveredLocations = searchCovered;
         _isSearching = false;
       });
     }
@@ -165,7 +138,6 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
           _activeReferenceLocation = null;
         }
       });
-      _loadNearbyForActiveReference();
       return;
     }
 
@@ -190,16 +162,7 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
           _feedbackMessage = null;
         }
       }
-
-      // Clear search query after selection to focus on nearby suggestions
-      if (_searchController.text.isNotEmpty) {
-        _searchController.clear();
-        _searchResults = [];
-        _isSearching = false;
-      }
     });
-
-    _loadNearbyForActiveReference();
   }
 
   void _removeLocation(TargetLocationModel location) {
@@ -212,7 +175,6 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
         _activeReferenceLocation = null;
       }
     });
-    _loadNearbyForActiveReference();
   }
 
   // ==========================================
@@ -222,19 +184,19 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
   Color _getTypeColor(String type) {
     switch (type.toLowerCase()) {
       case 'country':
-        return const Color(0xFF4338CA); // Deep indigo
+        return const Color(0xFF4338CA);
       case 'state':
       case 'province':
       case 'region':
-        return const Color(0xFF7C3AED); // Purple
+        return const Color(0xFF7C3AED);
       case 'city':
       case 'district':
-        return const Color(0xFF2563EB); // Blue
+        return const Color(0xFF2563EB);
       case 'locality':
       case 'sublocality':
       case 'neighborhood':
       case 'area':
-        return const Color(0xFF059669); // Emerald green
+        return const Color(0xFF059669);
       default:
         return const Color(0xFF4B5563);
     }
@@ -339,7 +301,7 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
                 onChanged: _onSearchChanged,
                 style: const TextStyle(fontSize: 13),
                 decoration: InputDecoration(
-                  hintText: 'Search target location... (e.g. Palayamkottai, Tirunelveli)',
+                  hintText: 'Search location... (e.g. Palayamkottai, Tirunelveli, New York)',
                   hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
                   prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF6366F1), size: 20),
                   suffixIcon: _searchController.text.isNotEmpty
@@ -385,7 +347,6 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
                             _activeReferenceLocation = null;
                             _feedbackMessage = null;
                           });
-                          _loadNearbyForActiveReference();
                         },
                         child: const Text(
                           'Clear All',
@@ -409,7 +370,6 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
                       return GestureDetector(
                         onTap: () {
                           setState(() => _activeReferenceLocation = loc);
-                          _loadNearbyForActiveReference();
                         },
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -483,45 +443,11 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
 
           const Divider(height: 8, thickness: 1, color: Color(0xFFF3F4F6)),
 
-          // Section Subtitle
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  hasSearchQuery
-                      ? 'SEARCH RESULTS'
-                      : _activeReferenceLocation != null
-                          ? 'NEARBY LOCATIONS TO ${_activeReferenceLocation!.name.toUpperCase()}'
-                          : 'NEARBY & SUGGESTED LOCATIONS',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF9CA3AF),
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                if (!hasSearchQuery && _activeReferenceLocation != null)
-                  Row(
-                    children: [
-                      Icon(Icons.near_me_rounded, size: 11, color: Colors.grey.shade500),
-                      const SizedBox(width: 2),
-                      Text(
-                        'Proximity Ranked',
-                        style: TextStyle(fontSize: 9.5, color: Colors.grey.shade500, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-              ],
-            ),
-          ),
-
-          // Main List (Search results or dynamic nearby locations - NO TABS)
+          // Main List (Search results + 4 Nearby Areas + Covered Areas OR Initial empty state)
           Expanded(
             child: hasSearchQuery
-                ? _buildSearchResultsList()
-                : _buildNearbyLocationsList(),
+                ? _buildSearchModeView()
+                : _buildSelectionModeView(),
           ),
 
           // Google Attribution Badge
@@ -593,7 +519,11 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
     );
   }
 
-  Widget _buildSearchResultsList() {
+  // ==========================================
+  // SEARCH MODE: Exact Search Result -> 4 Nearby Areas -> Covered Areas (Strict Order)
+  // ==========================================
+
+  Widget _buildSearchModeView() {
     if (_isSearching) {
       return const Center(
         child: CircularProgressIndicator(
@@ -624,56 +554,117 @@ class _TargetLocationPickerModalState extends State<TargetLocationPickerModal> {
       );
     }
 
-    return ListView.separated(
+    final exactOrTopResult = _searchResults.first;
+    final otherResults = _searchResults.skip(1).take(2).toList();
+    final nearby4 = _searchNearbyLocations.take(4).toList();
+
+    return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      itemCount: _searchResults.length,
-      separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF3F4F6)),
-      itemBuilder: (context, index) {
-        final loc = _searchResults[index];
-        return _buildLocationItemTile(loc);
-      },
+      children: [
+        // 1. SEARCH RESULT (Searched Location)
+        _buildSectionHeader('SEARCH RESULT'),
+        const SizedBox(height: 4),
+        _buildLocationItemTile(exactOrTopResult),
+        if (otherResults.isNotEmpty) ...[
+          const Divider(height: 1, color: Color(0xFFF3F4F6)),
+          ...otherResults.map((loc) => _buildLocationItemTile(loc)),
+        ],
+
+        // 2. FOUR (4) NEARBY AREAS
+        if (nearby4.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _buildSectionHeader(
+            'NEARBY AREAS (TO ${exactOrTopResult.name.toUpperCase()})',
+            badge: '${nearby4.length} Nearest',
+          ),
+          const SizedBox(height: 4),
+          ...nearby4.map((loc) => _buildLocationItemTile(loc)),
+        ],
+
+        // 3. COVERED AREAS (Geographically contained within or part of searched location)
+        if (_searchCoveredLocations.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _buildSectionHeader(
+            'COVERED AREAS (WITHIN ${exactOrTopResult.name.toUpperCase()})',
+            badge: '${_searchCoveredLocations.length} Areas',
+          ),
+          const SizedBox(height: 4),
+          ..._searchCoveredLocations.map((loc) => _buildLocationItemTile(loc)),
+        ],
+      ],
     );
   }
 
-  Widget _buildNearbyLocationsList() {
-    if (_isLoadingNearby) {
-      return const Center(
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: Color(0xFF4F46E5),
-        ),
-      );
-    }
+  // ==========================================
+  // INITIAL / EMPTY VIEW: No preloaded default locations
+  // ==========================================
 
-    if (_nearbyLocations.isEmpty) {
-      return Center(
+  Widget _buildSelectionModeView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.location_off_outlined, size: 36, color: Colors.grey.shade400),
-            const SizedBox(height: 8),
-            const Text(
-              'Search a location above to see nearby suggestions',
-              style: TextStyle(fontSize: 12.5, color: Color(0xFF4B5563)),
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEEF2FF),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.search_rounded, size: 30, color: Color(0xFF6366F1)),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 14),
+            const Text(
+              'Search Target Location',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF111827),
+              ),
+            ),
+            const SizedBox(height: 6),
             Text(
-              'e.g. Palayamkottai, Tirunelveli, Madurai, Chennai',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+              'Enter a city, locality, district, state, or country in the search bar above to view results, 4 nearby areas, and covered localities.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade500,
+                height: 1.4,
+              ),
             ),
           ],
         ),
-      );
-    }
+      ),
+    );
+  }
 
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      itemCount: _nearbyLocations.length,
-      separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF3F4F6)),
-      itemBuilder: (context, index) {
-        final loc = _nearbyLocations[index];
-        return _buildLocationItemTile(loc);
-      },
+  Widget _buildSectionHeader(String title, {String? badge}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF9CA3AF),
+            letterSpacing: 0.5,
+          ),
+        ),
+        if (badge != null)
+          Row(
+            children: [
+              Icon(Icons.near_me_rounded, size: 11, color: Colors.grey.shade500),
+              const SizedBox(width: 2),
+              Text(
+                badge,
+                style: TextStyle(fontSize: 9.5, color: Colors.grey.shade500, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+      ],
     );
   }
 

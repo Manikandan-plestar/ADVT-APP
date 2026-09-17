@@ -15,6 +15,7 @@ class PostItem {
   final String? validity;
   final String? discount;
   final String timeAgo;
+  final DateTime createdAt;
   final String? targetLocation;
   final List<TargetLocationModel>? targetLocationItems;
   bool isSaved;
@@ -34,15 +35,25 @@ class PostItem {
     this.validity,
     this.discount,
     required this.timeAgo,
+    DateTime? createdAt,
     this.targetLocation,
     this.targetLocationItems,
     this.isSaved = false,
-  }) : images = (images != null && images.isNotEmpty)
+  })  : createdAt = createdAt ?? DateTime.now(),
+        images = (images != null && images.isNotEmpty)
             ? images
             : (image != null && image.isNotEmpty ? [image] : []);
 
   /// Backward compatibility getter for single-image references
   String? get image => images.isNotEmpty ? images.first : null;
+
+  /// Formats the post creation time for bottom-right corner display (e.g. 10:35 AM)
+  String get formattedPostTime {
+    final hour = createdAt.hour % 12 == 0 ? 12 : createdAt.hour % 12;
+    final minute = createdAt.minute.toString().padLeft(2, '0');
+    final ampm = createdAt.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $ampm';
+  }
 }
 
 class PostService extends ChangeNotifier {
@@ -62,6 +73,7 @@ class PostService extends ChangeNotifier {
         "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=600&q=80",
       ],
       timeAgo: "1 hour ago",
+      createdAt: DateTime(2026, 9, 16, 10, 35),
       targetLocation: "Tirunelveli",
       isSaved: false,
     ),
@@ -76,6 +88,7 @@ class PostService extends ChangeNotifier {
       exp: "Open Positions",
       jobType: "Full Time",
       timeAgo: "2 hours ago",
+      createdAt: DateTime(2026, 9, 16, 11, 45),
       targetLocation: "Madurai",
       images: [],
       isSaved: false,
@@ -94,6 +107,7 @@ class PostService extends ChangeNotifier {
         "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80",
       ],
       timeAgo: "3 hours ago",
+      createdAt: DateTime(2026, 9, 16, 14, 15),
       targetLocation: "Nagercoil",
       isSaved: false,
     ),
@@ -171,6 +185,21 @@ class PostService extends ChangeNotifier {
     _feedPosts.insert(0, newPost);
     notifyListeners();
     return newPost;
+  }
+
+  /// Purpose: Delete a post by postId (only if caller owns the business profile)
+  bool deletePost(String postId, {String? callerBusinessProfileId}) {
+    final index = _feedPosts.indexWhere((p) => p.postId == postId);
+    if (index != -1) {
+      if (callerBusinessProfileId != null &&
+          _feedPosts[index].businessProfileId != callerBusinessProfileId) {
+        return false;
+      }
+      _feedPosts.removeAt(index);
+      notifyListeners();
+      return true;
+    }
+    return false;
   }
 
   PostItem? getPostById(String postId) {

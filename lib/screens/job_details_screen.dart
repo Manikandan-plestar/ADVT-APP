@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
 import '../services/post_service.dart';
 import '../services/business_service.dart';
 import '../widgets/business/cycling_post_image.dart';

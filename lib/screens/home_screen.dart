@@ -5,6 +5,7 @@ import '../services/location_service.dart';
 import '../services/post_service.dart';
 import '../services/business_service.dart';
 import '../services/notification_service.dart';
+import '../services/search_service.dart';
 import '../widgets/common/bottom_navigation.dart';
 import '../widgets/common/empty_state.dart';
 import '../widgets/home/post_card.dart';
@@ -24,6 +25,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentBottomNavIndex = 0;
   bool _isFilterDropdownOpen = false;
+  final _postSearchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _postSearchController.dispose();
+    super.dispose();
+  }
 
   void _handleCenterPlusClick() {
     final authService = Provider.of<AuthService>(context, listen: false);
@@ -96,9 +104,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final postService = Provider.of<PostService>(context);
     final bizService = Provider.of<BusinessService>(context);
     final notifService = Provider.of<NotificationService>(context);
+    final searchService = Provider.of<SearchService>(context);
 
     final followedIds = bizService.followedBusinesses.map((b) => b.businessProfileId).toList();
     final feedPosts = postService.getFilteredPosts(followedIds);
+    final isSearchingPosts = _postSearchController.text.trim().isNotEmpty;
+    final displayedPosts = isSearchingPosts
+        ? searchService.searchPosts(query: _postSearchController.text, posts: feedPosts)
+        : feedPosts;
 
     final filterTitleMap = {
       'all': 'Recommended Feed',
@@ -202,30 +215,42 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _currentBottomNavIndex = 1;
-                            });
-                          },
-                          child: Container(
-                            height: 40,
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF9FAFB),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFFE5E7EB)),
-                            ),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.search_rounded, size: 18, color: Color(0xFF9CA3AF)),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Search jobs, offers, businesses...',
-                                  style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+                        child: Container(
+                          height: 40,
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF9FAFB),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.search_rounded, size: 18, color: Color(0xFF9CA3AF)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: _postSearchController,
+                                  onChanged: (val) => setState(() {}),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Search jobs, offers, posts...',
+                                    hintStyle: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                  ),
+                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: Color(0xFF111827)),
                                 ),
-                              ],
-                            ),
+                              ),
+                              if (_postSearchController.text.isNotEmpty)
+                                IconButton(
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () {
+                                    _postSearchController.clear();
+                                    setState(() {});
+                                  },
+                                  icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF9CA3AF)),
+                                ),
+                            ],
                           ),
                         ),
                       ),
@@ -261,7 +286,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          filterTitleMap[postService.activeFilter] ?? 'Recommended Feed',
+                          isSearchingPosts
+                              ? 'Matching Posts (${displayedPosts.length})'
+                              : (filterTitleMap[postService.activeFilter] ?? 'Recommended Feed'),
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
@@ -275,7 +302,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            postService.activeFilter.toUpperCase(),
+                            isSearchingPosts ? 'SEARCH' : postService.activeFilter.toUpperCase(),
                             style: const TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
@@ -288,22 +315,26 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 14),
 
                     // Feed Items or Empty State
-                    if (feedPosts.isEmpty)
+                    if (displayedPosts.isEmpty)
                       EmptyStateWidget(
-                        icon: Icons.inbox_rounded,
-                        title: 'No items match this filter',
-                        subtitle: postService.activeFilter == 'followed'
-                            ? "You haven't followed any business with posts yet."
-                            : 'Try choosing another category.',
+                        icon: isSearchingPosts ? Icons.search_off_rounded : Icons.inbox_rounded,
+                        title: isSearchingPosts
+                            ? 'No posts found for "${_postSearchController.text.trim()}"'
+                            : 'No items match this filter',
+                        subtitle: isSearchingPosts
+                            ? 'Try searching by job role, offer deal, city, or company name.'
+                            : (postService.activeFilter == 'followed'
+                                ? "You haven't followed any business with posts yet."
+                                : 'Try choosing another category.'),
                       )
                     else
                       ListView.separated(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        itemCount: feedPosts.length,
+                        itemCount: displayedPosts.length,
                         separatorBuilder: (context, index) => const SizedBox(height: 14),
                         itemBuilder: (context, index) {
-                          final item = feedPosts[index];
+                          final item = displayedPosts[index];
                           return PostCard(
                             item: item,
                             onView: () {

@@ -43,7 +43,6 @@ class BizManageScreen extends StatelessWidget {
 
           bizService.addPostToBusiness(bizId, newPost);
 
-          // Trigger mock Notification alert (Requirement #6, #7, #11)
           notifService.addNotification(
             title: postType == 'job' ? 'New Job Opening' : 'Special Offer Alert',
             message: '$bizName published "$title" in $targetLocation.',
@@ -57,6 +56,7 @@ class BizManageScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bizService = Provider.of<BusinessService>(context);
+    final postService = Provider.of<PostService>(context);
     final activeBiz = bizService.activeBusiness;
 
     if (activeBiz == null) {
@@ -65,6 +65,11 @@ class BizManageScreen extends StatelessWidget {
         body: const Center(child: Text('No active business selected')),
       );
     }
+
+    // Refresh posts dynamically from postService to ensure deleted posts disappear immediately
+    final bizPosts = postService.allPosts
+        .where((p) => p.businessProfileId == activeBiz.businessProfileId)
+        .toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -91,6 +96,7 @@ class BizManageScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.edit_outlined, color: Color(0xFF4F46E5)),
+            tooltip: 'Edit Profile',
             onPressed: () {
               Navigator.pushNamed(context, '/edit-biz', arguments: activeBiz.businessProfileId);
             },
@@ -102,57 +108,39 @@ class BizManageScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Quick Action Card: Publish New Post
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFFF3F4F6)),
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Publish New Post',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF111827)),
+            // Only Two Post Buttons (Compact & Direct)
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _openCreatePostModal(context, 'job', activeBiz.businessProfileId, activeBiz.name),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEEF2FF),
+                      foregroundColor: const Color(0xFF4338CA),
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    icon: const Icon(Icons.work_outline_rounded, size: 16),
+                    label: const Text('Post a Job', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _openCreatePostModal(context, 'job', activeBiz.businessProfileId, activeBiz.name),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFEEF2FF),
-                            foregroundColor: const Color(0xFF4338CA),
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                          icon: const Icon(Icons.work_outline_rounded, size: 16),
-                          label: const Text('Post a Job', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _openCreatePostModal(context, 'offer', activeBiz.businessProfileId, activeBiz.name),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFFFBEB),
-                            foregroundColor: const Color(0xFFB45309),
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                          icon: const Icon(Icons.local_offer_outlined, size: 16),
-                          label: const Text('Post an Offer', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ],
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _openCreatePostModal(context, 'offer', activeBiz.businessProfileId, activeBiz.name),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFFFBEB),
+                      foregroundColor: const Color(0xFFB45309),
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    icon: const Icon(Icons.local_offer_outlined, size: 16),
+                    label: const Text('Post an Offer', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
 
@@ -162,7 +150,7 @@ class BizManageScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            if (activeBiz.posts.isEmpty)
+            if (bizPosts.isEmpty)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
@@ -189,74 +177,126 @@ class BizManageScreen extends StatelessWidget {
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: activeBiz.posts.length,
+                itemCount: bizPosts.length,
                 separatorBuilder: (context, index) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
-                  final post = activeBiz.posts[index];
+                  final post = bizPosts[index];
                   final isJob = post.type == 'job';
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: const Color(0xFFF3F4F6)),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // If post has images, display cycling post images with 5s interval
-                        if (post.images.isNotEmpty)
-                          CyclingPostImage(
-                            images: post.images,
-                            height: 120,
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-                            interval: const Duration(seconds: 5),
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: () {
+                      if (isJob) {
+                        Navigator.pushNamed(context, '/job-details', arguments: post.postId);
+                      } else {
+                        Navigator.pushNamed(context, '/offer-details', arguments: post.postId);
+                      }
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: const Color(0xFFF3F4F6)),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x04000000),
+                            blurRadius: 6,
+                            offset: Offset(0, 2),
                           ),
-                        Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: isJob ? const Color(0xFFEEF2FF) : const Color(0xFFFFFBEB),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      isJob ? 'JOB LISTING' : 'OFFER / DEAL',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: isJob ? const Color(0xFF4F46E5) : const Color(0xFFD97706),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // If post has images, display cycling post images with 5s interval
+                          if (post.images.isNotEmpty)
+                            CyclingPostImage(
+                              images: post.images,
+                              height: 140,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+                              interval: const Duration(seconds: 5),
+                            ),
+                          Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+                                      decoration: BoxDecoration(
+                                        color: isJob ? const Color(0xFFEEF2FF) : const Color(0xFFFFFBEB),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        isJob ? 'JOB' : 'OFFER',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                          color: isJob ? const Color(0xFF4F46E5) : const Color(0xFFD97706),
+                                          letterSpacing: 0.5,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  const Text('Live', style: TextStyle(fontSize: 10, color: Color(0xFF9CA3AF))),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                post.title,
-                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF111827)),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                post.subtitle,
-                                style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                post.description,
-                                style: const TextStyle(fontSize: 11, color: Color(0xFF4B5563)),
-                              ),
-                            ],
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  post.title,
+                                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Color(0xFF111827)),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  post.subtitle,
+                                  style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  post.description,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 11.5, color: Color(0xFF4B5563), height: 1.3),
+                                ),
+                                const SizedBox(height: 10),
+                                const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                                const SizedBox(height: 8),
+
+                                // Bottom Footer: Target Location (left) + Post Time (bottom-right corner)
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    if (post.targetLocation != null && post.targetLocation!.isNotEmpty)
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.location_on_outlined, size: 12, color: Color(0xFF9CA3AF)),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            post.targetLocation!,
+                                            style: const TextStyle(fontSize: 10.5, color: Color(0xFF9CA3AF), fontWeight: FontWeight.w500),
+                                          ),
+                                        ],
+                                      )
+                                    else
+                                      const SizedBox.shrink(),
+                                    Text(
+                                      post.formattedPostTime,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF9CA3AF),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   );
                 },

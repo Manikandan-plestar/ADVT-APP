@@ -71,6 +71,7 @@ class BusinessService extends ChangeNotifier {
           validity: "Booking Open",
           image: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=600&q=80",
           timeAgo: "1 hour ago",
+          createdAt: DateTime(2026, 9, 16, 10, 35),
           targetLocation: "Tirunelveli",
         ),
       ],
@@ -104,6 +105,7 @@ class BusinessService extends ChangeNotifier {
           exp: "Open Positions",
           jobType: "Full Time",
           timeAgo: "2 hours ago",
+          createdAt: DateTime(2026, 9, 16, 11, 45),
           targetLocation: "Madurai",
         ),
       ],
@@ -137,6 +139,7 @@ class BusinessService extends ChangeNotifier {
           validity: "Active Service",
           image: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80",
           timeAgo: "3 hours ago",
+          createdAt: DateTime(2026, 9, 16, 14, 15),
           targetLocation: "Nagercoil",
         ),
       ],
@@ -260,6 +263,24 @@ class BusinessService extends ChangeNotifier {
       biz.about = about;
       notifyListeners();
     }
+  }
+
+  /// Purpose: Delete a business profile (only if caller owns the profile)
+  bool deleteBusinessProfile(String businessProfileId, {String? callerUserId}) {
+    final biz = getBusinessById(businessProfileId);
+    if (biz == null) return false;
+
+    // Authorization check: only owner can delete
+    if (callerUserId != null && biz.ownerUserId != callerUserId) {
+      return false;
+    }
+
+    _businesses.removeWhere((b) => b.businessProfileId == businessProfileId);
+    if (_activeBusinessProfileId == businessProfileId) {
+      _activeBusinessProfileId = _businesses.isNotEmpty ? _businesses.first.businessProfileId : null;
+    }
+    notifyListeners();
+    return true;
   }
 
   void addPostToBusiness(String businessProfileId, PostItem post) {

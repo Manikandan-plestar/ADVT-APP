@@ -324,11 +324,13 @@ class TargetLocationService {
     return annotated;
   }
 
-  /// Geographically finds nearby locations relative to a reference target location
+  /// Geographically finds nearby independent locations relative to a reference target location
   /// using latitude and longitude proximity.
+  /// Automatically excludes any locations contained within (child/covered) or covering (parent) the reference location!
   Future<List<TargetLocationModel>> getNearbyLocationsForReference({
     required TargetLocationModel referenceLocation,
-    int limit = 15,
+    int limit = 20,
+    List<TargetLocationModel>? excludeLocations,
   }) async {
     final allKnown = <TargetLocationModel>[
       ...defaultLocations,
@@ -347,6 +349,22 @@ class TargetLocationService {
       if (isSameLocation(loc, referenceLocation)) continue;
       if (loc.placeId == referenceLocation.placeId) continue;
 
+      // Do NOT include locations contained within the selected location (e.g. child localities when selecting city)
+      if (isParent(referenceLocation, loc) || isCoveredBy(loc, referenceLocation)) {
+        continue;
+      }
+
+      // Do NOT include locations that contain the selected location (e.g. country/state when selecting city)
+      if (isParent(loc, referenceLocation) || isCoveredBy(referenceLocation, loc)) {
+        continue;
+      }
+
+      // Exclude already selected locations if provided
+      if (excludeLocations != null &&
+          excludeLocations.any((e) => isSameLocation(e, loc) || e.placeId == loc.placeId)) {
+        continue;
+      }
+
       final dist = calculateDistanceKm(
         referenceLocation.latitude,
         referenceLocation.longitude,
@@ -357,12 +375,21 @@ class TargetLocationService {
       // Max radius threshold: 180 km for localities/cities, 1200 km for states/countries
       final maxRadius = (referenceLocation.type == 'country' || referenceLocation.type == 'state') ? 1200.0 : 180.0;
 
-      if (dist <= maxRadius || (_clean(loc.cityName) == _clean(referenceLocation.cityName) && _clean(loc.cityName).isNotEmpty)) {
-        candidates.add(loc.copyWith(distanceInKm: dist));
+      // Exclude localities that belong to the reference city
+      if (referenceLocation.type == 'city' &&
+          loc.type == 'locality' &&
+          _clean(loc.cityName) == _clean(referenceLocation.cityName)) {
+        continue;
+      }
+
+      if (dist <= maxRadius) {
+        if (!candidates.any((c) => isSameLocation(c, loc))) {
+          candidates.add(loc.copyWith(distanceInKm: dist));
+        }
       }
     }
 
-    // Sort strictly by proximity to the reference location
+    // Sort strictly by proximity to the reference location (nearest first)
     candidates.sort((a, b) {
       final distA = a.distanceInKm ?? 999999.0;
       final distB = b.distanceInKm ?? 999999.0;
@@ -373,6 +400,85 @@ class TargetLocationService {
       return candidates.sublist(0, limit);
     }
     return candidates;
+  }
+
+  /// Geographically finds all covered / contained child locations for a reference target location
+  /// based on administrative hierarchy and structured containment rules.
+  /// (e.g. For Tirunelveli -> returns Palayamkottai, Samathanapuram, KTC Nagar, Melapalayam, etc.)
+  /// (e.g. For Tamil Nadu -> returns Tirunelveli, Madurai, Chennai, etc.)
+  /// (e.g. For California -> returns Los Angeles, San Francisco, etc.)
+  /// (e.g. For India / US -> returns states/provinces)
+  Future<List<TargetLocationModel>> getCoveredLocationsForReference({
+    required TargetLocationModel referenceLocation,
+    int limit = 15,
+  }) async {
+    final allKnown = <TargetLocationModel>[
+      ...defaultLocations,
+      ..._indianStates,
+      ..._usStates,
+      ..._uaeEmirates,
+      ..._ukRegions,
+      ..._singaporeRegions,
+      ..._australiaStates,
+      ..._canadaProvinces,
+      ..._germanyStates,
+      ..._worldwideCountries,
+    ];
+
+    final covered = <TargetLocationModel>[];
+
+    for (final loc in allKnown) {
+      if (isSameLocation(loc, referenceLocation)) continue;
+      if (loc.placeId == referenceLocation.placeId) continue;
+
+      // Containment check: referenceLocation is parent of loc
+      if (isParent(referenceLocation, loc) || isChild(loc, referenceLocation)) {
+        if (!covered.any((c) => isSameLocation(c, loc))) {
+          final dist = calculateDistanceKm(
+            referenceLocation.latitude,
+            referenceLocation.longitude,
+            loc.latitude,
+            loc.longitude,
+          );
+          covered.add(loc.copyWith(distanceInKm: dist));
+        }
+      }
+    }
+
+    // Dynamic country/state containment fallback
+    if (referenceLocation.type == 'country' && covered.isEmpty) {
+      final states = await getStatesForCountry(
+        countryName: referenceLocation.name,
+        countryCode: referenceLocation.countryCode,
+      );
+      for (final s in states) {
+        if (!covered.any((c) => isSameLocation(c, s))) {
+          covered.add(s);
+        }
+      }
+    } else if (referenceLocation.type == 'state' && covered.isEmpty) {
+      final cities = await getCitiesForContext(
+        countryName: referenceLocation.countryName,
+        stateName: referenceLocation.name,
+      );
+      for (final c in cities) {
+        if (!covered.any((item) => isSameLocation(item, c))) {
+          covered.add(c);
+        }
+      }
+    }
+
+    // Sort covered locations by distance
+    covered.sort((a, b) {
+      final distA = a.distanceInKm ?? 0.0;
+      final distB = b.distanceInKm ?? 0.0;
+      return distA.compareTo(distB);
+    });
+
+    if (covered.length > limit) {
+      return covered.sublist(0, limit);
+    }
+    return covered;
   }
 
   // ==========================================
@@ -575,8 +681,36 @@ class TargetLocationService {
       }
     }
 
+    // Sort matches: Exact name matches first, then prefix matches, then substring matches
+    matches.sort((a, b) {
+      final cleanA = _clean(a.name);
+      final cleanB = _clean(b.name);
+
+      final rankA = (cleanA == cleanQuery)
+          ? 0
+          : (cleanA.startsWith(cleanQuery)
+              ? 1
+              : (cleanA.contains(cleanQuery) ? 2 : 3));
+      final rankB = (cleanB == cleanQuery)
+          ? 0
+          : (cleanB.startsWith(cleanQuery)
+              ? 1
+              : (cleanB.contains(cleanQuery) ? 2 : 3));
+
+      if (rankA != rankB) {
+        return rankA.compareTo(rankB);
+      }
+
+      if (userLat != null && userLng != null) {
+        final distA = calculateDistanceKm(userLat, userLng, a.latitude, a.longitude);
+        final distB = calculateDistanceKm(userLat, userLng, b.latitude, b.longitude);
+        return distA.compareTo(distB);
+      }
+      return 0;
+    });
+
     _cache[cacheKey] = matches;
-    return sortByProximity(matches, userLat: userLat, userLng: userLng);
+    return matches;
   }
 
   /// Backward-compatible search method

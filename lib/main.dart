@@ -27,6 +27,7 @@ import 'screens/biz_manage_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/my_profile_screen.dart';
+import 'package:flutter/services.dart';
 import 'screens/followed_screen.dart';
 import 'screens/saved_items_screen.dart';
 import 'screens/coupons_screen.dart';
@@ -34,6 +35,16 @@ import 'screens/coupon_details_screen.dart';
 import 'screens/settings_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark, // Dark status bar icons on Android
+      statusBarBrightness: Brightness.light, // Dark status bar text on iOS
+      systemNavigationBarColor: Colors.white,
+      systemNavigationBarIconBrightness: Brightness.dark,
+    ),
+  );
   runApp(const AdvtApp());
 }
 
@@ -68,6 +79,15 @@ class AdvtApp extends StatelessWidget {
         theme: ThemeData(
           useMaterial3: true,
           scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+          appBarTheme: const AppBarTheme(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            systemOverlayStyle: SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: Brightness.dark,
+              statusBarBrightness: Brightness.light,
+            ),
+          ),
           colorScheme: ColorScheme.fromSeed(
             seedColor: const Color(0xFF4F46E5), // Indigo
             primary: const Color(0xFF4F46E5),

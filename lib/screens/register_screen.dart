@@ -13,7 +13,7 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _nameController = TextEditingController(text: 'Mani Kumar');
   final _phoneController = TextEditingController(text: '+91 98402 33421');
-  final _addressController = TextEditingController(text: '14/2, Usman Road, T. Nagar, Chennai - 600017');
+  final _addressController = TextEditingController();
 
   bool _isFetchingAddress = false;
 
@@ -127,25 +127,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEEF2FF),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(Icons.person_add_rounded, color: Color(0xFF4F46E5), size: 26),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEEF2FF),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(Icons.person_add_rounded, color: Color(0xFF4F46E5), size: 24),
+                    ),
+                    const SizedBox(width: 14),
+                    const Text(
+                      'User Registration',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF111827),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 20),
-                const Text(
-                  'User Registration',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 const Text(
                   'Complete your personal details to personalize local feed.',
                   style: TextStyle(

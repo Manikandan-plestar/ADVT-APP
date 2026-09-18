@@ -160,64 +160,68 @@ class JobCard extends StatelessWidget {
                 const Divider(height: 1, color: Color(0xFFF3F4F6)),
                 const SizedBox(height: 10),
 
-                // Bottom Action Row
+                // Bottom Action Row with Post Time on Bottom-Left
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    OutlinedButton(
-                      onPressed: onView,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF4F46E5),
-                        side: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text(
-                        'View Job',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    // Post Time on Bottom-Left
+                    Text(
+                      item.formattedPostTime,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF9CA3AF),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    TextButton.icon(
-                      onPressed: onToggleSave,
-                      style: TextButton.styleFrom(
-                        foregroundColor: item.isSaved ? const Color(0xFF4F46E5) : const Color(0xFF4B5563),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      icon: Icon(
-                        item.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                        size: 16,
-                        color: item.isSaved ? const Color(0xFF4F46E5) : const Color(0xFF4B5563),
-                      ),
-                      label: Text(
-                        item.isSaved ? 'Saved' : 'Save',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: item.isSaved ? const Color(0xFF4F46E5) : const Color(0xFF4B5563),
+                    // Action Buttons on Right
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        OutlinedButton(
+                          onPressed: onView,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF4F46E5),
+                            side: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            'View Job',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        TextButton.icon(
+                          onPressed: onToggleSave,
+                          style: TextButton.styleFrom(
+                            foregroundColor: item.isSaved ? const Color(0xFF4F46E5) : const Color(0xFF4B5563),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          icon: Icon(
+                            item.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                            size: 16,
+                            color: item.isSaved ? const Color(0xFF4F46E5) : const Color(0xFF4B5563),
+                          ),
+                          label: Text(
+                            item.isSaved ? 'Saved' : 'Save',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: item.isSaved ? const Color(0xFF4F46E5) : const Color(0xFF4B5563),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
-                ),
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.bottomRight,
-                  child: Text(
-                    item.formattedPostTime,
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF9CA3AF),
-                    ),
-                  ),
                 ),
               ],
             ),

@@ -59,6 +59,29 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  String _formatGreetingAddress(LocationDetails loc, String userAddress) {
+    if (loc.area.isNotEmpty && loc.district.isNotEmpty && loc.area != loc.district) {
+      return '${loc.area}, ${loc.district}';
+    }
+    if (loc.city.isNotEmpty && loc.district.isNotEmpty && loc.city != loc.district) {
+      return '${loc.city}, ${loc.district}';
+    }
+    if (loc.area.isNotEmpty) return loc.area;
+    if (loc.city.isNotEmpty) return loc.city;
+    if (loc.district.isNotEmpty) return loc.district;
+
+    if (userAddress.isNotEmpty) {
+      final parts = userAddress.split(',').map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
+      if (parts.length >= 2) {
+        final cleanDist = parts[parts.length - 1].split('-')[0].trim();
+        return '${parts[parts.length - 2]}, $cleanDist';
+      } else if (parts.isNotEmpty) {
+        return parts.first;
+      }
+    }
+    return 'Palayamkottai, Tirunelveli';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -163,9 +186,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                   const Icon(Icons.location_on_rounded, size: 12, color: Color(0xFFEF4444)),
                                   const SizedBox(width: 2),
                                   Text(
-                                    locationService.currentLocation.formattedAddress,
+                                    _formatGreetingAddress(
+                                      locationService.currentLocation,
+                                      authService.currentUser.address,
+                                    ),
                                     style: const TextStyle(
                                       fontSize: 11,
+                                      fontWeight: FontWeight.w500,
                                       color: Color(0xFF6B7280),
                                     ),
                                   ),

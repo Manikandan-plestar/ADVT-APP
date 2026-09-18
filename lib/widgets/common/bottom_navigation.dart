@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+ import 'package:flutter/material.dart';
 import 'curved_nav_bar_clipper.dart';
 
 class CustomBottomNavigation extends StatelessWidget {
@@ -55,10 +55,10 @@ class CustomBottomNavigation extends StatelessWidget {
                         inactiveColor: inactiveColor,
                         onTap: () => onTap(0),
                       ),
-                      // Item 1: Search
+                      // Item 1: Coupons
                       _buildNavItem(
-                        icon: Icons.search_rounded,
-                        label: 'Search',
+                        icon: Icons.confirmation_number_rounded,
+                        label: 'Coupons',
                         isActive: currentIndex == 1,
                         activeColor: activeColor,
                         inactiveColor: inactiveColor,
@@ -66,10 +66,10 @@ class CustomBottomNavigation extends StatelessWidget {
                       ),
                       // Spacer for center elevated (+) button
                       const SizedBox(width: 56),
-                      // Item 2: Coupons
+                      // Item 2: Search
                       _buildNavItem(
-                        icon: Icons.confirmation_number_rounded,
-                        label: 'Coupons',
+                        icon: Icons.search_rounded,
+                        label: 'Search',
                         isActive: currentIndex == 2,
                         activeColor: activeColor,
                         inactiveColor: inactiveColor,

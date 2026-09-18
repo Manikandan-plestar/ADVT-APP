@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../services/post_service.dart';
 import '../services/business_service.dart';
 import '../widgets/common/empty_state.dart';
+import '../widgets/common/notification_bell_button.dart';
 
 class CouponsScreen extends StatefulWidget {
   const CouponsScreen({super.key});
@@ -95,17 +96,27 @@ class _CouponsScreenState extends State<CouponsScreen> {
               // Light Top Header Bar: Title + Search & Filter Row
               Container(
                 color: Colors.white,
-                padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 14),
+                padding: const EdgeInsets.fromLTRB(20, 16, 14, 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Coupons',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF111827),
-                        letterSpacing: -0.3,
+                    SizedBox(
+                      height: 42,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: const [
+                          Text(
+                            'Coupons',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF111827),
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                          NotificationBellButton(),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -256,8 +267,6 @@ class _CouponsScreenState extends State<CouponsScreen> {
                           ),
                           itemBuilder: (context, index) {
                             final coupon = filteredCoupons[index];
-                            final biz = bizService.getBusinessById(coupon.businessProfileId);
-                            final logoUrl = coupon.brandLogo ?? (biz?.image ?? '');
                             final isExpired = coupon.badgeText?.toLowerCase() == 'expired';
 
                             return GestureDetector(
@@ -316,44 +325,6 @@ class _CouponsScreenState extends State<CouponsScreen> {
                                                   Colors.transparent,
                                                   Colors.black26,
                                                 ],
-                                              ),
-                                            ),
-                                          ),
-
-                                          // Top-Left Brand Logo Avatar Badge
-                                          Positioned(
-                                            top: 9,
-                                            left: 9,
-                                            child: Container(
-                                              width: 30,
-                                              height: 30,
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                shape: BoxShape.circle,
-                                                border: Border.all(color: Colors.white, width: 1.5),
-                                                boxShadow: const [
-                                                  BoxShadow(
-                                                    color: Colors.black26,
-                                                    blurRadius: 4,
-                                                  ),
-                                                ],
-                                              ),
-                                              child: ClipOval(
-                                                child: logoUrl.isNotEmpty
-                                                    ? Image.network(
-                                                        logoUrl,
-                                                        fit: BoxFit.cover,
-                                                        errorBuilder: (_, __, ___) => const Icon(
-                                                          Icons.storefront_rounded,
-                                                          size: 15,
-                                                          color: Color(0xFF4F46E5),
-                                                        ),
-                                                      )
-                                                    : const Icon(
-                                                        Icons.storefront_rounded,
-                                                        size: 15,
-                                                        color: Color(0xFF4F46E5),
-                                                      ),
                                               ),
                                             ),
                                           ),

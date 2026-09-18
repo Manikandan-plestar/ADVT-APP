@@ -1,17 +1,32 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/target_location_model.dart';
 import '../../services/device_image_picker_service.dart';
 import '../../services/target_location_service.dart';
 import 'target_location_picker_modal.dart';
 
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    return TextEditingValue(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
+    );
+  }
+}
+
 class CreatePostModal extends StatefulWidget {
-  final String postType; // 'job' or 'offer'
+  final String postType; // 'job', 'offer', or 'coupon'
   final Function({
     required String title,
     required String subtitle,
     required String description,
     required String targetLocation,
+    String? couponCode,
     List<TargetLocationModel>? targetLocations,
     List<String>? images,
   }) onSubmit;
@@ -29,6 +44,7 @@ class CreatePostModal extends StatefulWidget {
 class _CreatePostModalState extends State<CreatePostModal> {
   final _titleController = TextEditingController();
   final _subtitleController = TextEditingController();
+  final _couponCodeController = TextEditingController();
   final _descController = TextEditingController();
 
   // Selected post images from local device
@@ -47,6 +63,7 @@ class _CreatePostModalState extends State<CreatePostModal> {
   void dispose() {
     _titleController.dispose();
     _subtitleController.dispose();
+    _couponCodeController.dispose();
     _descController.dispose();
     super.dispose();
   }
@@ -216,7 +233,7 @@ class _CreatePostModalState extends State<CreatePostModal> {
                 hintText: isJob
                     ? 'e.g. 1-2 Years Exp • Full Time'
                     : (isCoupon
-                        ? 'e.g. Deep Bass Earbuds | Code: SAVE50'
+                        ? 'e.g. Deep Bass Earbuds & Free Shipping'
                         : 'e.g. Valid till Sunday • Coupon: FESTIVE'),
                 hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
                 filled: true,
@@ -233,6 +250,62 @@ class _CreatePostModalState extends State<CreatePostModal> {
               ),
             ),
             const SizedBox(height: 14),
+
+            // Coupon Code Input (Placed below Product / Deal Tagline, uppercase only)
+            if (isCoupon) ...[
+              const Text(
+                'Coupon Code',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF4B5563),
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _couponCodeController,
+                textCapitalization: TextCapitalization.characters,
+                inputFormatters: [
+                  UpperCaseTextFormatter(),
+                ],
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: Color(0xFF111827),
+                ),
+                decoration: InputDecoration(
+                  hintText: 'e.g. SAVE50 / FESTIVE2026',
+                  hintStyle: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF9CA3AF),
+                    letterSpacing: 0,
+                    fontWeight: FontWeight.normal,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.confirmation_number_outlined,
+                    size: 18,
+                    color: Color(0xFF4F46E5),
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFFF9FAFB),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
 
             // Description Input
             Text(
@@ -619,6 +692,9 @@ class _CreatePostModalState extends State<CreatePostModal> {
                           title: _titleController.text.trim(),
                           subtitle: _subtitleController.text.trim(),
                           description: _descController.text.trim(),
+                          couponCode: isCoupon && _couponCodeController.text.trim().isNotEmpty
+                              ? _couponCodeController.text.trim().toUpperCase()
+                              : null,
                           targetLocation: locationSummary,
                           targetLocations: _selectedTargetLocations,
                           images: _selectedImages,

@@ -14,6 +14,7 @@ import '../widgets/business/select_profile_modal.dart';
 import 'search_screen.dart';
 import 'coupons_screen.dart';
 import 'profile_screen.dart';
+import '../widgets/common/notification_bell_button.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -94,8 +95,8 @@ class _HomeScreenState extends State<HomeScreen> {
               index: _currentBottomNavIndex,
               children: [
                 _buildHomeFeedTab(),
-                const SearchScreen(),
                 const CouponsScreen(),
+                const SearchScreen(),
                 const ProfileScreen(),
               ],
             ),
@@ -151,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
             // Top Header Bar
             Container(
               color: Colors.white,
-              padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 12),
+              padding: const EdgeInsets.fromLTRB(20, 16, 14, 12),
               child: Column(
                 children: [
                   Row(
@@ -203,37 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       // Notification Bell Trigger
-                      Stack(
-                        children: [
-                          IconButton(
-                            onPressed: () {
-                              Navigator.pushNamed(context, '/notifications');
-                            },
-                            icon: Container(
-                              width: 36,
-                              height: 36,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFF3F4F6),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.notifications_none_rounded, color: Color(0xFF4B5563), size: 20),
-                            ),
-                          ),
-                          if (notifService.unreadCount > 0)
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFEF4444),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+                      const NotificationBellButton(),
                     ],
                   ),
 

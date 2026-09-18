@@ -26,6 +26,7 @@ class BizManageScreen extends StatelessWidget {
           required String subtitle,
           required String description,
           required String targetLocation,
+          String? couponCode,
           List<TargetLocationModel>? targetLocations,
           List<String>? images,
         }) async {
@@ -36,6 +37,7 @@ class BizManageScreen extends StatelessWidget {
             title: title,
             subtitle: subtitle,
             description: description,
+            couponCode: couponCode,
             targetLocation: targetLocation,
             targetLocationItems: targetLocations,
             images: images,

@@ -16,9 +16,7 @@ void main() {
   group('AuthService Unit Tests', () {
     test('Initial user details', () async {
       final auth = AuthService();
-      await auth.initSession();
-      expect(auth.currentUser.name, 'Mani Kumar');
-      expect(auth.currentUser.email, 'mani.chennai@example.com');
+      expect(auth.isLoggedIn, isFalse);
     });
 
     test('Verify OTP code requires server response', () async {

@@ -89,7 +89,11 @@ class _OtpScreenState extends State<OtpScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-      Navigator.pushReplacementNamed(context, '/register');
+      if (response.isExistingUser) {
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+      } else {
+        Navigator.pushReplacementNamed(context, '/register');
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

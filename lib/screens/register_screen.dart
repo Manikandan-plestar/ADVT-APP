@@ -11,11 +11,13 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final _nameController = TextEditingController(text: 'Mani Kumar');
-  final _phoneController = TextEditingController(text: '+91 98402 33421');
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
 
+  LocationDetails? _locationDetails;
   bool _isFetchingAddress = false;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -46,6 +48,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const SnackBar(
               content: Text('Location permission is required to fetch your address.'),
               backgroundColor: Color(0xFFDC2626),
+              behavior: SnackBarBehavior.floating,
             ),
           );
         }
@@ -56,6 +59,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final loc = await locService.getCurrentLocation();
       if (mounted) {
         setState(() {
+          _locationDetails = loc;
           _addressController.text = loc.formattedAddress;
           _isFetchingAddress = false;
         });
@@ -69,6 +73,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SnackBar(
             content: Text('Failed to retrieve address. Please check location settings and try again.'),
             backgroundColor: Color(0xFFDC2626),
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -79,6 +84,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (_isFetchingAddress) return;
     setState(() {
       _addressController.clear();
+      _locationDetails = null;
     });
   }
 
@@ -87,24 +93,132 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final phone = _phoneController.text.trim();
     final address = _addressController.text.trim();
 
-    if (name.isEmpty || phone.isEmpty) {
+    if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all required fields')),
+        const SnackBar(
+          content: Text('Please enter your name'),
+          backgroundColor: Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
 
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your mobile number'),
+          backgroundColor: Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (address.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please tap "Get Address" to fetch your location'),
+          backgroundColor: Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _isSubmitting = true;
+    });
+
     final authService = Provider.of<AuthService>(context, listen: false);
-    await authService.registerUser(
+    final email = authService.pendingEmail ?? authService.currentUser.email;
+
+    String locality = (_locationDetails?.area ?? '').trim();
+    String city = (_locationDetails?.city ?? '').trim();
+    String state = (_locationDetails?.state ?? '').trim();
+    String country = (_locationDetails?.country ?? '').trim();
+
+    // Parse separated address components from the full address string if any are empty
+    final parts = address.split(',').map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
+    if (parts.isNotEmpty) {
+      if (country.isEmpty) {
+        final lastPart = parts.last.replaceAll(RegExp(r'[0-9-]'), '').trim();
+        country = lastPart.isNotEmpty ? lastPart : 'India';
+      }
+      if (state.isEmpty && parts.length >= 2) {
+        final stateCandidate = parts[parts.length - 2].replaceAll(RegExp(r'[0-9-]'), '').trim();
+        if (stateCandidate.isNotEmpty) state = stateCandidate;
+      }
+      if (city.isEmpty) {
+        if (parts.length >= 3) {
+          city = parts[parts.length - 3].replaceAll(RegExp(r'[0-9-]'), '').trim();
+        } else if (parts.length == 2) {
+          city = parts[0].replaceAll(RegExp(r'[0-9-]'), '').trim();
+        } else {
+          city = parts[0].trim();
+        }
+      }
+      if (locality.isEmpty) {
+        if (parts.length >= 4) {
+          locality = parts.sublist(0, parts.length - 3).join(', ').trim();
+        } else {
+          locality = parts[0].trim();
+        }
+      }
+    }
+
+    if (country.isEmpty) country = 'India';
+    if (state.isEmpty) state = 'State';
+    if (city.isEmpty) city = 'City';
+    if (locality.isEmpty) locality = city;
+
+    final response = await authService.registerUser(
       name: name,
       phone: phone,
-      email: authService.pendingEmail ?? 'mani.chennai@example.com',
-      address: address.isNotEmpty ? address : 'T. Nagar, Chennai',
-      location: 'T. Nagar, Chennai',
+      email: email,
+      address: address, // Full complete address string
+      locality: locality,
+      city: city,
+      state: state,
+      country: country,
     );
 
-    if (mounted) {
+    if (!mounted) return;
+
+    setState(() {
+      _isSubmitting = false;
+    });
+
+    if (response.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text(response.message)),
+            ],
+          ),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text(response.message)),
+            ],
+          ),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -112,32 +226,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF374151)),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 1. Header: Back Arrow and User Registration Title in same horizontal row, vertically centered
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEEF2FF),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(Icons.person_add_rounded, color: Color(0xFF4F46E5), size: 24),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF111827), size: 24),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => Navigator.pop(context),
                     ),
                     const SizedBox(width: 14),
                     const Text(
@@ -146,52 +250,90 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF111827),
+                        letterSpacing: -0.3,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Complete your personal details to personalize local feed.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF6B7280),
+                Padding(
+                  padding: const EdgeInsets.only(left: 38),
+                  child: const Text(
+                    'Complete your personal details to personalize local feed.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF6B7280),
+                      height: 1.3,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 28),
 
-                // Name Input
-                const Text('Full Name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+                // 2. Name Input (Initially Empty)
+                const Text(
+                  'Name',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151)),
+                ),
                 const SizedBox(height: 6),
                 TextField(
                   controller: _nameController,
+                  textCapitalization: TextCapitalization.words,
+                  style: const TextStyle(fontSize: 15, color: Color(0xFF111827), fontWeight: FontWeight.w500),
                   decoration: InputDecoration(
+                    hintText: 'Enter your name',
+                    hintStyle: const TextStyle(fontSize: 14, color: Color(0xFF9CA3AF)),
                     filled: true,
                     fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
 
-                // Phone Input
-                const Text('Mobile Number', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+                // 3. Mobile Number Input (Initially Empty)
+                const Text(
+                  'Mobile Number',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151)),
+                ),
                 const SizedBox(height: 6),
                 TextField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
+                  style: const TextStyle(fontSize: 15, color: Color(0xFF111827), fontWeight: FontWeight.w500),
                   decoration: InputDecoration(
+                    hintText: 'Enter your mobile number',
+                    hintStyle: const TextStyle(fontSize: 14, color: Color(0xFF9CA3AF)),
                     filled: true,
                     fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
 
-                // Address Input (Read-only)
+                // 4. Address Input (Read-only, Automatic Geocoding only)
                 const Text(
                   'Address',
                   style: TextStyle(
@@ -210,6 +352,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     fontSize: 14,
                     color: Color(0xFF111827),
                     fontWeight: FontWeight.w500,
+                    height: 1.3,
                   ),
                   decoration: InputDecoration(
                     hintText: 'Tap here or "Get Address" to fetch location...',
@@ -358,20 +501,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ],
 
-                const SizedBox(height: 32),
+                const SizedBox(height: 36),
 
+                // Save & Next Button
                 SizedBox(
                   width: double.infinity,
-                  height: 50,
+                  height: 52,
                   child: ElevatedButton(
-                    onPressed: _handleRegister,
+                    onPressed: (_isSubmitting || _isFetchingAddress) ? null : _handleRegister,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF4F46E5),
+                      disabledBackgroundColor: const Color(0xFFC7D2FE),
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       elevation: 0,
                     ),
-                    child: const Text('Save & Next', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+                          )
+                        : const Text(
+                            'Save & Next',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
                   ),
                 ),
               ],

@@ -212,7 +212,11 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     if (response.success) {
-      Navigator.pushReplacementNamed(context, '/register');
+      if (response.isExistingUser) {
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+      } else {
+        Navigator.pushReplacementNamed(context, '/register');
+      }
     } else {
       setState(() {
         _errorMessage = response.message;

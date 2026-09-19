@@ -20,8 +20,8 @@ const DB_PASSWORD = process.env.DB_PASSWORD || '';
 const DB_NAME = process.env.DB_NAME || 'ADVT_APP';
 
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
-const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
-const SMTP_SECURE = process.env.SMTP_SECURE === 'true';
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10);
+const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
 const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
 const FROM_EMAIL = process.env.FROM_EMAIL || `"ADVT App" <${SMTP_USER || 'no-reply@advtapp.com'}>`;
@@ -32,7 +32,7 @@ const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX_ATTEMPTS || '3', 10);
 const RATE_LIMIT_WINDOW_MIN = parseInt(process.env.RATE_LIMIT_WINDOW_MINUTES || '10', 10);
 
 // ==========================================
-// 2. MYSQL DATABASE CONNECTION POOL
+// 2. MYSQL DATABASE CONNECTION POOL & SCHEMA
 // ==========================================
 const pool = mysql.createPool({
   host: DB_HOST,
@@ -47,15 +47,30 @@ const pool = mysql.createPool({
 });
 
 /**
- * Automatically creates the email_otp table if it does not exist
+ * Automatically creates the Database & all required Tables (email_otp, users)
  */
 async function initDatabase() {
   try {
+    // 1. Verify/Create database connection
+    const rawConnection = await mysql.createConnection({
+      host: DB_HOST,
+      port: DB_PORT,
+      user: DB_USER,
+      password: DB_PASSWORD
+    });
+
+    await rawConnection.query(`
+      CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`
+      CHARACTER SET utf8mb4 
+      COLLATE utf8mb4_unicode_ci;
+    `);
+    await rawConnection.end();
+
     const connection = await pool.getConnection();
     console.log(`[Database] Connected successfully to MySQL database: "${DB_NAME}"`);
 
-    // Ensure email_otp table is created
-    const createTableQuery = `
+    // 2. Table: email_otp (Email Verification Codes)
+    const createOtpTableQuery = `
       CREATE TABLE IF NOT EXISTS email_otp (
         id INT AUTO_INCREMENT PRIMARY KEY,
         email VARCHAR(255) NOT NULL,
@@ -68,16 +83,58 @@ async function initDatabase() {
         INDEX idx_created (created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `;
-
-    await connection.query(createTableQuery);
+    await connection.query(createOtpTableQuery);
     console.log('[Database] Table "email_otp" is verified and ready.');
+
+    // 3. Table: users (Registered App Users with 1-Email-Per-User rule)
+    const createUsersTableQuery = `
+      CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        full_name VARCHAR(255) NOT NULL,
+        mobile_number VARCHAR(20) NOT NULL,
+        country_code VARCHAR(10) DEFAULT '+91',
+        full_address TEXT NOT NULL,
+        locality VARCHAR(100),
+        city VARCHAR(100),
+        state VARCHAR(100),
+        country VARCHAR(100),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_email (email),
+        INDEX idx_city (city),
+        INDEX idx_state (state)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `;
+    await connection.query(createUsersTableQuery);
+    console.log('[Database] Table "users" is verified and ready.');
+
+    // Auto-migrate/heal existing records if locality, city, or country are empty
+    try {
+      const [existingUsers] = await connection.query(
+        `SELECT id, full_address, locality, city, state, country 
+         FROM users 
+         WHERE (locality IS NULL OR locality = '') 
+            OR (city IS NULL OR city = '') 
+            OR (country IS NULL OR country = '')`
+      );
+      for (const u of existingUsers) {
+        if (u.full_address && u.full_address.trim().length > 0) {
+          const comps = extractAddressComponents(u.full_address, u.locality, u.city, u.state, u.country);
+          await connection.query(
+            `UPDATE users SET locality = ?, city = ?, state = ?, country = ? WHERE id = ?`,
+            [comps.locality, comps.city, comps.state, comps.country, u.id]
+          );
+          console.log(`[Database] Auto-populated address components for user ID ${u.id} (${comps.locality}, ${comps.city}, ${comps.country})`);
+        }
+      }
+    } catch (healErr) {
+      console.warn('[Database] Note on address healing:', healErr.message);
+    }
 
     connection.release();
   } catch (error) {
-    console.error('[Database] MySQL Connection/Initialization Error:', error.message);
-    if (error.code === 'ER_BAD_DB_ERROR') {
-      console.error(`[Database] Tip: Make sure database "${DB_NAME}" exists in MySQL.`);
-    }
+    console.error('[Database] MySQL Initialization Error:', error.message);
   }
 }
 
@@ -109,11 +166,9 @@ const transporterConfig = SMTP_HOST === 'smtp.gmail.com'
 
 const transporter = nodemailer.createTransport(transporterConfig);
 
-// Verify email transporter on startup
 transporter.verify((error) => {
   if (error) {
     console.warn('[Mailer] SMTP Warning: Could not verify SMTP credentials. Please check .env settings.');
-    console.warn(`[Mailer] Error details: ${error.message}`);
   } else {
     console.log(`[Mailer] SMTP Transporter ready to send emails from: ${SMTP_USER}`);
   }
@@ -158,11 +213,8 @@ function buildOtpHtmlTemplate(otp, expiryMinutes = 5) {
   `;
 }
 
-/**
- * Sends OTP email using Nodemailer. Throws error if email fails.
- */
 async function sendOtpEmail(email, otp) {
-  if (!SMTP_USER || !SMTP_PASS) {
+  if (!SMTP_USER || !cleanSmtpPass) {
     throw new Error('SMTP credentials are not configured in backend .env file.');
   }
 
@@ -184,7 +236,7 @@ async function sendOtpEmail(email, otp) {
 // ==========================================
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
-// Configured Development-Only Test Accounts
+// Development-Only Test Accounts (Instant Bypass in Development)
 const DEV_TEST_ACCOUNTS = {
   'test1@gmail.com': '123456',
   'test2@gmail.com': '123456'
@@ -210,6 +262,101 @@ function isValidEmailFormat(email) {
   return email && emailRegex.test(email.trim());
 }
 
+/**
+ * Extracts locality, city, state, and country from full address string
+ * if any of those individual fields are empty or missing.
+ * The full_address is ALWAYS preserved 100% completely.
+ */
+function extractAddressComponents(fullAddress, existingLocality = '', existingCity = '', existingState = '', existingCountry = '') {
+  let locality = (existingLocality || '').trim();
+  let city = (existingCity || '').trim();
+  let state = (existingState || '').trim();
+  let country = (existingCountry || '').trim();
+
+  const rawAddress = (fullAddress || '').trim();
+  if (!rawAddress) {
+    return {
+      full_address: '',
+      locality: locality || 'Local Area',
+      city: city || 'City',
+      state: state || 'State',
+      country: country || 'India'
+    };
+  }
+
+  // Split address by commas and clean each component
+  const parts = rawAddress
+    .split(',')
+    .map(p => p.trim())
+    .filter(p => p.length > 0);
+
+  if (parts.length > 0) {
+    // 1. Country extraction (last segment)
+    if (!country) {
+      const lastPart = parts[parts.length - 1];
+      const cleanedCountry = lastPart.replace(/[0-9-]/g, '').trim();
+      if (cleanedCountry.length > 1) {
+        country = cleanedCountry;
+      } else {
+        country = 'India';
+      }
+    }
+
+    // 2. State extraction (2nd from last, or segment containing postal code)
+    if (!state) {
+      if (parts.length >= 2) {
+        const stateCandidate = parts[parts.length - 2];
+        const cleanedState = stateCandidate.replace(/[0-9-]/g, '').trim();
+        if (cleanedState.length > 0) {
+          state = cleanedState;
+        }
+      }
+      if (!state && parts.length === 1) {
+        state = 'Tamil Nadu';
+      }
+    }
+
+    // 3. City extraction (3rd from last, or 1st/2nd segment)
+    if (!city) {
+      if (parts.length >= 3) {
+        city = parts[parts.length - 3].replace(/[0-9-]/g, '').trim();
+      } else if (parts.length === 2) {
+        city = parts[0].replace(/[0-9-]/g, '').trim();
+      } else if (parts.length === 1) {
+        city = parts[0].trim();
+      }
+      if (!city) city = 'Chennai';
+    }
+
+    // 4. Locality extraction (street, sublocality, or leading segment)
+    if (!locality) {
+      if (parts.length >= 4) {
+        locality = parts.slice(0, parts.length - 3).join(', ').trim();
+      } else if (parts.length === 3) {
+        locality = parts[0].trim();
+      } else if (parts.length === 2) {
+        locality = parts[0].trim();
+      } else {
+        locality = parts[0].trim();
+      }
+      if (!locality) locality = city || 'Local Area';
+    }
+  }
+
+  if (!country) country = 'India';
+  if (!state) state = 'State';
+  if (!city) city = 'City';
+  if (!locality) locality = city;
+
+  return {
+    full_address: rawAddress,
+    locality,
+    city,
+    state,
+    country
+  };
+}
+
 async function checkRateLimit(email) {
   const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MIN * 60 * 1000);
   const [rows] = await pool.query(
@@ -226,9 +373,6 @@ async function checkRateLimit(email) {
   };
 }
 
-/**
- * Generates OTP, saves to email_otp table, and delivers via email.
- */
 async function processAndSendOtp(email) {
   const cleanEmail = email.trim().toLowerCase();
 
@@ -241,7 +385,7 @@ async function processAndSendOtp(email) {
     };
   }
 
-  // 1. Rate limiting check (max 3 per 10 minutes)
+  // 1. Rate limiting check (max 3 requests per 10 minutes)
   const rateStatus = await checkRateLimit(cleanEmail);
   if (rateStatus.isLimited) {
     const error = new Error(`Rate limit exceeded. Maximum ${RATE_LIMIT_MAX} requests per ${RATE_LIMIT_WINDOW_MIN} minutes.`);
@@ -269,7 +413,6 @@ async function processAndSendOtp(email) {
   try {
     await sendOtpEmail(cleanEmail, otp);
   } catch (mailErr) {
-    // If sending fails, delete the OTP record from database so invalid records don't persist
     await pool.query(`DELETE FROM email_otp WHERE id = ?`, [insertResult.insertId]);
     console.error(`[Auth] Failed to deliver OTP email to ${cleanEmail}:`, mailErr.message);
     const error = new Error(`Failed to send verification email: ${mailErr.message}`);
@@ -303,7 +446,7 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'online',
     timestamp: new Date().toISOString(),
-    service: 'ADVT APP Authentication Server'
+    service: 'ADVT APP Single-File Server'
   });
 });
 
@@ -368,6 +511,7 @@ app.post(['/api/resend-email-otp', '/api/resend-otp'], async (req, res) => {
 /**
  * 3. POST /api/verify-email-otp
  * Body: { "email": "user@example.com", "otp": "654321" }
+ * Verifies OTP and checks if user already exists in `users` table.
  */
 app.post(['/api/verify-email-otp', '/api/verify-otp'], async (req, res) => {
   try {
@@ -390,86 +534,123 @@ app.post(['/api/verify-email-otp', '/api/verify-otp'], async (req, res) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanOtp = otp.toString().trim();
 
-    // 1. Development Test Account Bypass (test1@gmail.com, test2@gmail.com with PIN 123456)
+    let isVerified = false;
+
+    // A. Development Test Account Bypass (test1@gmail.com, test2@gmail.com with PIN 123456)
     if (isDevTestAccount(cleanEmail)) {
       if (verifyDevTestCredentials(cleanEmail, cleanOtp)) {
-        const token = jwt.sign(
-          { email: cleanEmail, isVerified: true, isDevTest: true },
-          JWT_SECRET,
-          { expiresIn: '7d' }
-        );
-
-        console.log(`[Auth DEV] Test account authenticated successfully: ${cleanEmail}`);
-        return res.status(200).json({
-          success: true,
-          message: 'Email verified successfully!',
-          token,
-          user: {
-            email: cleanEmail,
-            isEmailVerified: true
-          }
-        });
+        isVerified = true;
+        console.log(`[Auth DEV] Test account authenticated: ${cleanEmail}`);
       } else {
         return res.status(400).json({
           success: false,
           message: 'Wrong OTP'
         });
       }
+    } else {
+      // B. Normal Users: Query latest active OTP from database
+      const [rows] = await pool.query(
+        `SELECT * FROM email_otp 
+         WHERE email = ? AND is_used = 0
+         ORDER BY created_at DESC 
+         LIMIT 1`,
+        [cleanEmail]
+      );
+
+      if (!rows || rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Wrong OTP'
+        });
+      }
+
+      const record = rows[0];
+
+      // Expiration check
+      const now = new Date();
+      const expiresAt = new Date(record.expires_at);
+      if (now > expiresAt) {
+        await pool.query(`UPDATE email_otp SET is_used = 1 WHERE id = ?`, [record.id]);
+        return res.status(400).json({
+          success: false,
+          message: 'OTP expired. Please resend the OTP.'
+        });
+      }
+
+      // Code match check
+      if (record.otp !== cleanOtp) {
+        return res.status(400).json({
+          success: false,
+          message: 'Wrong OTP'
+        });
+      }
+
+      // Mark single-use OTP as used
+      await pool.query(`UPDATE email_otp SET is_used = 1 WHERE id = ?`, [record.id]);
+      isVerified = true;
     }
 
-    // 2. Normal Users: Query the latest active OTP record from database
-    const [rows] = await pool.query(
-      `SELECT * FROM email_otp 
-       WHERE email = ? AND is_used = 0
-       ORDER BY created_at DESC 
-       LIMIT 1`,
+    if (!isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Wrong OTP'
+      });
+    }
+
+    // C. Check if user already exists in `users` table
+    const [userRows] = await pool.query(
+      `SELECT * FROM users WHERE email = ? LIMIT 1`,
       [cleanEmail]
     );
 
-    if (!rows || rows.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Wrong OTP'
-      });
-    }
-
-    const record = rows[0];
-
-    // Check expiration
-    const now = new Date();
-    const expiresAt = new Date(record.expires_at);
-    if (now > expiresAt) {
-      await pool.query(`UPDATE email_otp SET is_used = 1 WHERE id = ?`, [record.id]);
-      return res.status(400).json({
-        success: false,
-        message: 'OTP expired. Please resend the OTP.'
-      });
-    }
-
-    // Check code match
-    if (record.otp !== cleanOtp) {
-      return res.status(400).json({
-        success: false,
-        message: 'Wrong OTP'
-      });
-    }
-
-    // Mark OTP as used (invalidate single-use)
-    await pool.query(`UPDATE email_otp SET is_used = 1 WHERE id = ?`, [record.id]);
-
-    // Generate JWT session token
     const token = jwt.sign(
       { email: cleanEmail, isVerified: true },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    console.log(`[Auth] Email successfully verified: ${cleanEmail}`);
+    if (userRows && userRows.length > 0) {
+      const existingUser = userRows[0];
+      console.log(`[Auth] Existing user verified: ${cleanEmail} (ID: ${existingUser.id})`);
 
+      // Ensure address components are parsed if missing
+      const addrComponents = extractAddressComponents(
+        existingUser.full_address,
+        existingUser.locality,
+        existingUser.city,
+        existingUser.state,
+        existingUser.country
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: 'Email verified successfully!',
+        token,
+        isExistingUser: true,
+        user: {
+          id: existingUser.id,
+          userId: `U${existingUser.id.toString().padStart(3, '0')}`,
+          email: existingUser.email,
+          full_name: existingUser.full_name,
+          mobile_number: existingUser.mobile_number,
+          country_code: existingUser.country_code || '+91',
+          full_address: existingUser.full_address,
+          locality: addrComponents.locality,
+          city: addrComponents.city,
+          state: addrComponents.state,
+          country: addrComponents.country,
+          isEmailVerified: true
+        }
+      });
+    }
+
+    // New user (requires registration)
+    console.log(`[Auth] New user verified: ${cleanEmail} -> Requires registration`);
     return res.status(200).json({
       success: true,
       message: 'Email verified successfully!',
       token,
+      isExistingUser: false,
       user: {
         email: cleanEmail,
         isEmailVerified: true
@@ -480,6 +661,272 @@ app.post(['/api/verify-email-otp', '/api/verify-otp'], async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Internal server error while verifying OTP.'
+    });
+  }
+});
+
+/**
+ * 4. POST /api/register-user
+ * Body: { email, full_name, mobile_number, country_code, full_address, locality, city, state, country }
+ * Inserts new user into `users` table with strict 1-email-per-user enforcement.
+ */
+app.post(['/api/register-user', '/api/register'], async (req, res) => {
+  try {
+    const {
+      email,
+      full_name,
+      mobile_number,
+      country_code = '+91',
+      full_address,
+      locality = '',
+      city = '',
+      state = '',
+      country = ''
+    } = req.body;
+
+    if (!email || !isValidEmailFormat(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'A valid email address is required.'
+      });
+    }
+
+    if (!full_name || full_name.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Full Name is required.'
+      });
+    }
+
+    if (!mobile_number || mobile_number.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mobile Number is required.'
+      });
+    }
+
+    if (!full_address || full_address.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Address is required.'
+      });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = full_name.trim();
+    const cleanPhone = mobile_number.trim();
+    const cleanAddress = full_address.trim();
+
+    // Extract separated address components (locality, city, state, country) from address
+    const addr = extractAddressComponents(cleanAddress, locality, city, state, country);
+
+    // Check if email already registered (Database Unique Check)
+    const [existing] = await pool.query(
+      `SELECT id FROM users WHERE email = ? LIMIT 1`,
+      [cleanEmail]
+    );
+
+    if (existing && existing.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'An account with this email address already exists. Please login.'
+      });
+    }
+
+    // Insert new user into MySQL `users` table
+    const insertQuery = `
+      INSERT INTO users (email, full_name, mobile_number, country_code, full_address, locality, city, state, country)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const [result] = await pool.query(insertQuery, [
+      cleanEmail,
+      cleanName,
+      cleanPhone,
+      country_code.trim(),
+      addr.full_address,
+      addr.locality,
+      addr.city,
+      addr.state,
+      addr.country
+    ]);
+
+    const newUserId = result.insertId;
+    console.log(`[Users] Successfully registered user: ${cleanEmail} (ID: ${newUserId})`);
+
+    const token = jwt.sign(
+      { id: newUserId, email: cleanEmail, isVerified: true },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: 'User registered successfully!',
+      token,
+      user: {
+        id: newUserId,
+        userId: `U${newUserId.toString().padStart(3, '0')}`,
+        email: cleanEmail,
+        full_name: cleanName,
+        mobile_number: cleanPhone,
+        country_code: country_code.trim(),
+        full_address: addr.full_address,
+        locality: addr.locality,
+        city: addr.city,
+        state: addr.state,
+        country: addr.country
+      }
+    });
+  } catch (error) {
+    console.error('[Users] Registration error:', error.message);
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({
+        success: false,
+        message: 'An account with this email address already exists.'
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error while registering user.'
+    });
+  }
+});
+
+/**
+ * 5. GET /api/user-profile
+ * Query: ?email=user@example.com
+ */
+app.get('/api/user-profile', async (req, res) => {
+  try {
+    const email = req.query.email;
+    if (!email || !isValidEmailFormat(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid email query parameter is required.'
+      });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const [rows] = await pool.query(
+      `SELECT * FROM users WHERE email = ? LIMIT 1`,
+      [cleanEmail]
+    );
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User profile not found.'
+      });
+    }
+
+    const user = rows[0];
+    const addr = extractAddressComponents(
+      user.full_address,
+      user.locality,
+      user.city,
+      user.state,
+      user.country
+    );
+
+    return res.status(200).json({
+      success: true,
+      user: {
+        id: user.id,
+        userId: `U${user.id.toString().padStart(3, '0')}`,
+        email: user.email,
+        full_name: user.full_name,
+        mobile_number: user.mobile_number,
+        country_code: user.country_code || '+91',
+        full_address: user.full_address,
+        locality: addr.locality,
+        city: addr.city,
+        state: addr.state,
+        country: addr.country
+      }
+    });
+  } catch (error) {
+    console.error('[Users] Fetch profile error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error while fetching user profile.'
+    });
+  }
+});
+
+/**
+ * 6. PUT /api/update-profile
+ * Body: { email, full_name, mobile_number, country_code, full_address, locality, city, state, country }
+ */
+app.put('/api/update-profile', async (req, res) => {
+  try {
+    const {
+      email,
+      full_name,
+      mobile_number,
+      country_code = '+91',
+      full_address,
+      locality = '',
+      city = '',
+      state = '',
+      country = ''
+    } = req.body;
+
+    if (!email || !isValidEmailFormat(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid email is required.'
+      });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const addr = extractAddressComponents(full_address, locality, city, state, country);
+
+    const updateQuery = `
+      UPDATE users 
+      SET full_name = ?, mobile_number = ?, country_code = ?, full_address = ?, locality = ?, city = ?, state = ?, country = ?
+      WHERE email = ?
+    `;
+
+    const [result] = await pool.query(updateQuery, [
+      (full_name || '').trim(),
+      (mobile_number || '').trim(),
+      (country_code || '+91').trim(),
+      addr.full_address,
+      addr.locality,
+      addr.city,
+      addr.state,
+      addr.country,
+      cleanEmail
+    ]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User profile not found to update.'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully!',
+      user: {
+        email: cleanEmail,
+        full_name: (full_name || '').trim(),
+        mobile_number: (mobile_number || '').trim(),
+        country_code: (country_code || '+91').trim(),
+        full_address: addr.full_address,
+        locality: addr.locality,
+        city: addr.city,
+        state: addr.state,
+        country: addr.country
+      }
+    });
+  } catch (error) {
+    console.error('[Users] Update profile error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error while updating profile.'
     });
   }
 });
@@ -499,14 +946,16 @@ async function startServer() {
   await initDatabase();
 
   app.listen(PORT, '0.0.0.0', () => {
-    // console.log(`====================================================`);
-    // console.log(`🚀 ADVT APP Server running on http://localhost:${PORT}`);
-    // console.log(`📡 Endpoints:`);
-    // console.log(`   - POST http://localhost:${PORT}/api/send-email-otp`);
-    // console.log(`   - POST http://localhost:${PORT}/api/verify-email-otp`);
-    // console.log(`   - POST http://localhost:${PORT}/api/resend-email-otp`);
-    // console.log(`   - GET  http://localhost:${PORT}/api/health`);
-    // console.log(`====================================================`);
+    console.log(`====================================================`);
+    console.log(`🚀 ADVT APP Server running on http://localhost:${PORT}`);
+    console.log(`📡 Endpoints:`);
+    console.log(`   - POST http://localhost:${PORT}/api/send-email-otp`);
+    console.log(`   - POST http://localhost:${PORT}/api/verify-email-otp`);
+    console.log(`   - POST http://localhost:${PORT}/api/register-user`);
+    console.log(`   - GET  http://localhost:${PORT}/api/user-profile`);
+    console.log(`   - PUT  http://localhost:${PORT}/api/update-profile`);
+    console.log(`   - GET  http://localhost:${PORT}/api/health`);
+    console.log(`====================================================`);
   });
 }
 

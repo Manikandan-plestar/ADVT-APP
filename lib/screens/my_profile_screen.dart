@@ -91,20 +91,26 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     });
   }
 
-  void _saveChanges() {
+  void _saveChanges() async {
     final authService = Provider.of<AuthService>(context, listen: false);
-    authService.updateProfile(
+    final success = await authService.updateProfile(
       name: _nameController.text.trim(),
       phone: _phoneController.text.trim(),
       email: _emailController.text.trim(),
       address: _addressController.text.trim(),
     );
-    setState(() {
-      _isEditing = false;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile updated successfully!')),
-    );
+    if (mounted) {
+      setState(() {
+        _isEditing = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'Profile updated successfully!' : 'Failed to update profile.'),
+          backgroundColor: success ? const Color(0xFF10B981) : const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override
@@ -160,11 +166,11 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    _buildDetailField('FULL NAME', user.name),
+                    _buildDetailField('EMAIL ADDRESS', user.email),
+                    const SizedBox(height: 14),
+                    _buildDetailField('NAME', user.name),
                     const SizedBox(height: 14),
                     _buildDetailField('MOBILE NUMBER', user.phone),
-                    const SizedBox(height: 14),
-                    _buildDetailField('EMAIL ADDRESS', user.email),
                     const SizedBox(height: 14),
                     _buildDetailField('ADDRESS', user.address, isLast: true),
 
@@ -206,7 +212,32 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    const Text('Full Name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF4B5563))),
+                    // 1. Email (First, Read-Only / Non-Editable)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: const [
+                        Text('Email', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF4B5563))),
+
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _emailController,
+                      readOnly: true,
+                      style: const TextStyle(fontSize: 14, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: const Color(0xFFF3F4F6),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        suffixIcon: const Icon(Icons.lock_outline_rounded, size: 18, color: Color(0xFF9CA3AF)),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // 2. Name (Second, Editable)
+                    const Text('Name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF4B5563))),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _nameController,
@@ -214,6 +245,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                     ),
                     const SizedBox(height: 14),
 
+                    // 3. Phone (Third, Editable)
                     const Text('Phone', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF4B5563))),
                     const SizedBox(height: 6),
                     TextField(
@@ -222,14 +254,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    const Text('Email', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF4B5563))),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _emailController,
-                      decoration: _inputDecoration(),
-                    ),
-                    const SizedBox(height: 14),
-
+                    // 4. Address (Fourth, Automated Geocoding)
                     const Text('Address', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF4B5563))),
                     const SizedBox(height: 6),
                     TextField(

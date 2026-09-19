@@ -118,12 +118,13 @@ class LocationService extends ChangeNotifier {
 
         String area = subLocality.isNotEmpty
             ? subLocality
-            : (street.isNotEmpty ? street : locality);
+            : (street.isNotEmpty ? street : (locality.isNotEmpty ? locality : "Local Area"));
         String city = locality.isNotEmpty
             ? locality
-            : (subAdmin.isNotEmpty ? subAdmin : admin);
+            : (subAdmin.isNotEmpty ? subAdmin : (admin.isNotEmpty ? admin : "City"));
         String district = subAdmin.isNotEmpty ? subAdmin : city;
-        String state = admin.isNotEmpty ? admin : '';
+        String state = admin.isNotEmpty ? admin : (district.isNotEmpty ? district : "State");
+        if (country.trim().isEmpty) country = "India";
 
         // Construct readable full address
         List<String> addressParts = [];
@@ -137,10 +138,13 @@ class LocationService extends ChangeNotifier {
             addressParts.add(admin);
           }
         }
+        if (country.isNotEmpty && !addressParts.contains(country)) {
+          addressParts.add(country);
+        }
 
         String full = addressParts.isNotEmpty
             ? addressParts.join(', ')
-            : "$area, $city, $state";
+            : "$area, $city, $state, $country";
 
         _currentLocation = LocationDetails(
           area: area,

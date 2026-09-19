@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 class UserProfile {
   final String userId;
@@ -10,6 +11,7 @@ class UserProfile {
   String address;
   String location;
   bool isLoggedIn;
+  String? authToken;
 
   UserProfile({
     required this.userId,
@@ -19,6 +21,21 @@ class UserProfile {
     required this.address,
     required this.location,
     this.isLoggedIn = false,
+    this.authToken,
+  });
+}
+
+class AuthResponse {
+  final bool success;
+  final String message;
+  final String? token;
+  final int? expiresInSeconds;
+
+  AuthResponse({
+    required this.success,
+    required this.message,
+    this.token,
+    this.expiresInSeconds,
   });
 }
 
@@ -36,6 +53,19 @@ class AuthService extends ChangeNotifier {
   String? _pendingEmail;
   bool _isOtpSent = false;
   bool _isLoading = false;
+
+  // Base URL configuration:
+  // - Android emulator: http://10.0.2.2:5000
+  // - iOS Simulator / Windows / Web: http://localhost:5000
+  String _baseUrl = !kIsWeb && Platform.isAndroid 
+      ? 'http://10.0.2.2:5000' 
+      : 'http://localhost:5000';
+
+  String get baseUrl => _baseUrl;
+  set baseUrl(String url) {
+    _baseUrl = url;
+    notifyListeners();
+  }
 
   UserProfile get currentUser => _user;
   bool get isLoggedIn => _user.isLoggedIn;
@@ -74,6 +104,7 @@ class AuthService extends ChangeNotifier {
               address: data['user_address'] as String? ?? "14/2, Usman Road, T. Nagar, Chennai - 600017",
               location: data['user_location'] as String? ?? "T. Nagar, Chennai",
               isLoggedIn: true,
+              authToken: data['auth_token'] as String?,
             );
             notifyListeners();
           }
@@ -91,13 +122,14 @@ class AuthService extends ChangeNotifier {
     try {
       final file = await _getSessionFile();
       final data = {
-        'is_logged_in': true,
+        'is_logged_in': _user.isLoggedIn,
         'user_id': _user.userId,
         'user_name': _user.name,
         'user_phone': _user.phone,
         'user_email': _user.email,
         'user_address': _user.address,
         'user_location': _user.location,
+        'auth_token': _user.authToken,
       };
       await file.writeAsString(jsonEncode(data));
     } catch (e) {
@@ -107,39 +139,150 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Purpose: Send OTP to the entered email address.
-  Future<bool> sendOtp(String email) async {
+  /// 1. Send OTP to email via Node.js Express Backend
+  /// Calls POST /api/send-email-otp
+  Future<AuthResponse> sendOtp(String email) async {
     _isLoading = true;
     notifyListeners();
 
-    await Future.delayed(const Duration(milliseconds: 600));
+    final cleanEmail = email.trim();
+    final url = Uri.parse('$_baseUrl/api/send-email-otp');
 
-    _pendingEmail = email;
-    _isOtpSent = true;
-    _isLoading = false;
-    notifyListeners();
-    return true;
+    try {
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': cleanEmail}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final success = response.statusCode == 200 && (data['success'] == true);
+      final message = data['message'] as String? ?? (success ? 'OTP sent successfully.' : 'Failed to send OTP.');
+
+      if (success) {
+        _pendingEmail = cleanEmail;
+        _isOtpSent = true;
+      } else {
+        _isOtpSent = false;
+      }
+
+      _isLoading = false;
+      notifyListeners();
+
+      return AuthResponse(
+        success: success,
+        message: message,
+        expiresInSeconds: data['expiresInSeconds'] as int? ?? 300,
+      );
+    } catch (e) {
+      _isLoading = false;
+      _isOtpSent = false;
+      notifyListeners();
+
+      return AuthResponse(
+        success: false,
+        message: 'Cannot connect to server. Please ensure backend is running.',
+      );
+    }
   }
 
-  /// Purpose: Verify the entered 6-digit OTP code.
-  Future<bool> verifyOtp(String otp) async {
+  /// 2. Resend OTP to email
+  /// Calls POST /api/resend-email-otp
+  Future<AuthResponse> resendOtp(String email) async {
     _isLoading = true;
     notifyListeners();
 
-    await Future.delayed(const Duration(milliseconds: 600));
+    final cleanEmail = email.trim();
+    final url = Uri.parse('$_baseUrl/api/resend-email-otp');
 
-    _isLoading = false;
-    if (otp == "123456") {
-      _user.isLoggedIn = true;
-      if (_pendingEmail != null) {
-        _user.email = _pendingEmail!;
+    try {
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': cleanEmail}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final success = response.statusCode == 200 && (data['success'] == true);
+      final message = data['message'] as String? ?? (success ? 'OTP resent successfully.' : 'Failed to resend OTP.');
+
+      if (success) {
+        _pendingEmail = cleanEmail;
       }
-      await _saveSession();
+
+      _isLoading = false;
       notifyListeners();
-      return true;
-    } else {
+
+      return AuthResponse(
+        success: success,
+        message: message,
+        expiresInSeconds: data['expiresInSeconds'] as int? ?? 300,
+      );
+    } catch (e) {
+      _isLoading = false;
       notifyListeners();
-      return false;
+
+      return AuthResponse(
+        success: false,
+        message: 'Cannot connect to server. Please try again.',
+      );
+    }
+  }
+
+  /// 3. Verify OTP against MySQL backend
+  /// Calls POST /api/verify-email-otp
+  Future<AuthResponse> verifyOtp(String otp) async {
+    _isLoading = true;
+    notifyListeners();
+
+    final email = _pendingEmail ?? _user.email;
+    final cleanOtp = otp.trim();
+    final url = Uri.parse('$_baseUrl/api/verify-email-otp');
+
+    try {
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'email': email,
+              'otp': cleanOtp,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final success = response.statusCode == 200 && (data['success'] == true);
+      final message = data['message'] as String? ?? (success ? 'Verified successfully.' : 'Wrong OTP');
+      final token = data['token'] as String?;
+
+      if (success) {
+        _user.isLoggedIn = true;
+        _user.email = email;
+        _user.authToken = token;
+        await _saveSession();
+      }
+
+      _isLoading = false;
+      notifyListeners();
+
+      return AuthResponse(
+        success: success,
+        message: message,
+        token: token,
+      );
+    } catch (e) {
+      _isLoading = false;
+      notifyListeners();
+
+      return AuthResponse(
+        success: false,
+        message: 'Cannot connect to server. Please try again.',
+      );
     }
   }
 
@@ -164,6 +307,7 @@ class AuthService extends ChangeNotifier {
       address: address,
       location: location,
       isLoggedIn: true,
+      authToken: _user.authToken,
     );
 
     await _saveSession();
@@ -189,6 +333,7 @@ class AuthService extends ChangeNotifier {
   /// Purpose: Logout current user and clear session.
   Future<void> logout() async {
     _user.isLoggedIn = false;
+    _user.authToken = null;
     _isOtpSent = false;
     _pendingEmail = null;
     try {

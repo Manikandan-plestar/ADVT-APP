@@ -93,14 +93,14 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     final authService = Provider.of<AuthService>(context, listen: false);
-    final success = await authService.sendOtp(email);
+    final response = await authService.sendOtp(email);
 
-    if (mounted && success) {
+    if (mounted && response.success) {
       setState(() {
         _isSendingOtp = false;
         _isOtpSent = true;
       });
-      _startResendTimer(30);
+      _startResendTimer(60);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -109,7 +109,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('OTP sent to $email (Demo: 123456)'),
+                child: Text(response.message),
               ),
             ],
           ),
@@ -121,7 +121,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } else if (mounted) {
       setState(() {
         _isSendingOtp = false;
-        _errorMessage = 'Failed to send OTP. Please check your connection and try again.';
+        _errorMessage = response.message;
       });
     }
   }
@@ -138,13 +138,13 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     final authService = Provider.of<AuthService>(context, listen: false);
-    final success = await authService.sendOtp(email);
+    final response = await authService.resendOtp(email);
 
-    if (mounted && success) {
+    if (mounted && response.success) {
       setState(() {
         _isResendingOtp = false;
       });
-      _startResendTimer(30);
+      _startResendTimer(60);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -153,7 +153,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const Icon(Icons.mark_email_read_rounded, color: Colors.white, size: 20),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('A new OTP has been sent to $email'),
+                child: Text(response.message),
               ),
             ],
           ),
@@ -165,7 +165,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } else if (mounted) {
       setState(() {
         _isResendingOtp = false;
-        _errorMessage = 'Failed to resend OTP. Please try again.';
+        _errorMessage = response.message;
       });
     }
   }
@@ -203,7 +203,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     final authService = Provider.of<AuthService>(context, listen: false);
-    final success = await authService.verifyOtp(otp);
+    final response = await authService.verifyOtp(otp);
 
     if (!mounted) return;
 
@@ -211,11 +211,11 @@ class _LoginScreenState extends State<LoginScreen> {
       _isVerifyingOtp = false;
     });
 
-    if (success) {
+    if (response.success) {
       Navigator.pushReplacementNamed(context, '/register');
     } else {
       setState(() {
-        _errorMessage = 'Invalid or expired OTP code. Use test pin: 123456';
+        _errorMessage = response.message;
       });
     }
   }
@@ -528,7 +528,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             letterSpacing: 2.0,
                           ),
                           decoration: InputDecoration(
-                            hintText: 'Enter 6-digit OTP (123456)',
+                            hintText: 'Enter 6-digit OTP',
                             hintStyle: const TextStyle(
                               color: Color(0xFF9CA3AF),
                               fontSize: 14,

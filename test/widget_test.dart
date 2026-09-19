@@ -21,13 +21,10 @@ void main() {
       expect(auth.currentUser.email, 'mani.chennai@example.com');
     });
 
-    test('Verify OTP code', () async {
+    test('Verify OTP code requires server response', () async {
       final auth = AuthService();
-      final valid = await auth.verifyOtp('123456');
-      expect(valid, isTrue);
-
-      final invalid = await auth.verifyOtp('999999');
-      expect(invalid, isFalse);
+      final response = await auth.verifyOtp('000000');
+      expect(response.success, isFalse);
     });
   });
 

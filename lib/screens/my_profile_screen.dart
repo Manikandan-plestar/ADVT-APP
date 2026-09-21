@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/location_service.dart';
+import '../utils/text_utils.dart';
 
 class MyProfileScreen extends StatefulWidget {
   const MyProfileScreen({super.key});
@@ -168,7 +169,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
 
                     _buildDetailField('EMAIL ADDRESS', user.email),
                     const SizedBox(height: 14),
-                    _buildDetailField('NAME', user.name),
+                    _buildDetailField('NAME', TextUtils.capitalizeWords(user.name)),
                     const SizedBox(height: 14),
                     _buildDetailField('MOBILE NUMBER', user.phone),
                     const SizedBox(height: 14),

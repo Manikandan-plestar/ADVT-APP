@@ -77,7 +77,7 @@ class BusinessCard extends StatelessWidget {
                         children: [
                           Flexible(
                             child: Text(
-                              business.name,
+                              business.displayName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -97,7 +97,7 @@ class BusinessCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${business.category} • ${business.location}',
+                        '${business.displayCategory} • ${business.displayLocation}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(

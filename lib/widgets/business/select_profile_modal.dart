@@ -95,16 +95,16 @@ class SelectProfileModal extends StatelessWidget {
                           ),
                         );
                       },
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          width: 40,
-                          height: 40,
-                          color: const Color(0xFFEEF2FF),
-                          child: const Icon(Icons.store_rounded, color: Color(0xFF4F46E5)),
-                        ),
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        width: 40,
+                        height: 40,
+                        color: const Color(0xFFEEF2FF),
+                        child: const Icon(Icons.store_rounded, color: Color(0xFF4F46E5)),
                       ),
+                    ),
                   ),
                   title: Text(
-                    biz.name,
+                    biz.displayName,
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -112,7 +112,7 @@ class SelectProfileModal extends StatelessWidget {
                     ),
                   ),
                   subtitle: Text(
-                    biz.category,
+                    biz.displayCategory,
                     style: const TextStyle(
                       fontSize: 11,
                       color: Color(0xFF9CA3AF),

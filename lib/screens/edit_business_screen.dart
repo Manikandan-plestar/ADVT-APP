@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
 import '../services/business_service.dart';
 import '../services/country_code_data.dart';
 import '../services/device_image_picker_service.dart';
@@ -88,7 +89,7 @@ class _EditBusinessScreenState extends State<EditBusinessScreen> {
     }
   }
 
-  void _saveChanges() {
+  void _saveChanges() async {
     final name = _nameController.text.trim();
     final rawPhone = _phoneController.text.replaceAll(RegExp(r'\s+'), '');
     final cleanPhoneDigits = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
@@ -123,23 +124,31 @@ class _EditBusinessScreenState extends State<EditBusinessScreen> {
 
     final fullBusinessPhone = '${_selectedCountry.dialCode} $cleanPhoneDigits';
 
+    final authService = Provider.of<AuthService>(context, listen: false);
     final bizService = Provider.of<BusinessService>(context, listen: false);
-    bizService.updateBusinessProfile(
+
+    await bizService.updateBusinessProfile(
       businessProfileId: widget.businessProfileId,
       name: name,
       category: _catController.text.trim().isNotEmpty ? _catController.text.trim() : 'General Store',
       phone: fullBusinessPhone,
+      countryCode: _selectedCountry.dialCode,
       images: _images,
       about: _aboutController.text.trim(),
+      callerUserId: authService.currentUser.userId,
+      authToken: authService.currentUser.authToken,
+      userEmail: authService.currentUser.email,
     );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Business Profile updated successfully.'),
-        backgroundColor: Color(0xFF10B981),
-      ),
-    );
-    Navigator.pop(context);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Business Profile updated successfully.'),
+          backgroundColor: Color(0xFF10B981),
+        ),
+      );
+      Navigator.pop(context);
+    }
   }
 
   @override

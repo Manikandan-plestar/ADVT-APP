@@ -88,11 +88,11 @@ class BizManageScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              activeBiz.name,
+              activeBiz.displayName,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF111827)),
             ),
             Text(
-              '${activeBiz.category} • ${activeBiz.location}',
+              '${activeBiz.displayCategory} • ${activeBiz.displayLocation}',
               style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
             ),
           ],

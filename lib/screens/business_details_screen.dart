@@ -60,7 +60,7 @@ class BusinessDetailsScreen extends StatelessWidget {
                           children: [
                             Flexible(
                               child: Text(
-                                biz.name,
+                                biz.displayName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -149,7 +149,7 @@ class BusinessDetailsScreen extends StatelessWidget {
                           children: [
                             Flexible(
                               child: Text(
-                                biz.name,
+                                biz.displayName,
                                 style: const TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
@@ -209,7 +209,7 @@ class BusinessDetailsScreen extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
-                                biz.category,
+                                biz.displayCategory,
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF4F46E5)),
                               ),
                             ),
@@ -225,7 +225,7 @@ class BusinessDetailsScreen extends StatelessWidget {
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                biz.registeredAddress.isNotEmpty ? biz.registeredAddress : biz.location,
+                                biz.registeredAddress.isNotEmpty ? biz.registeredAddress : biz.displayLocation,
                                 style: const TextStyle(fontSize: 12.5, color: Color(0xFF4B5563), height: 1.3),
                               ),
                             ),

@@ -70,7 +70,7 @@ class BusinessHeader extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        business.name,
+                        business.displayName,
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -87,7 +87,7 @@ class BusinessHeader extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    business.category,
+                    business.displayCategory,
                     style: const TextStyle(
                       fontSize: 11,
                       color: Color(0xFF9CA3AF),

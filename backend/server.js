@@ -109,6 +109,35 @@ async function initDatabase() {
     await connection.query(createUsersTableQuery);
     console.log('[Database] Table "users" is verified and ready.');
 
+    // 4. Table: business_profile (Business Profiles owned by users)
+    const createBusinessProfileTableQuery = `
+      CREATE TABLE IF NOT EXISTS business_profile (
+        business_id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        business_name VARCHAR(255) NOT NULL,
+        category VARCHAR(100),
+        business_phone VARCHAR(30) NOT NULL,
+        country_code VARCHAR(10) DEFAULT '+91',
+        full_address TEXT NOT NULL,
+        locality VARCHAR(100),
+        city VARCHAR(100),
+        state VARCHAR(100),
+        country VARCHAR(100) DEFAULT 'India',
+        latitude DECIMAL(10, 7) DEFAULT 0.0,
+        longitude DECIMAL(10, 7) DEFAULT 0.0,
+        profile_image TEXT,
+        images TEXT,
+        about TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_user_id (user_id),
+        INDEX idx_city (city),
+        INDEX idx_category (category)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `;
+    await connection.query(createBusinessProfileTableQuery);
+    console.log('[Database] Table "business_profile" is verified and ready.');
+
     // Auto-migrate/heal existing records if locality, city, or country are empty
     try {
       const [existingUsers] = await connection.query(
@@ -931,6 +960,516 @@ app.put('/api/update-profile', async (req, res) => {
   }
 });
 
+// ==========================================
+// 5.1 BUSINESS PROFILE AUTHENTICATION & APIS
+// ==========================================
+
+/**
+ * Authentication Middleware:
+ * Resolves authenticated user from:
+ * 1. Authorization: Bearer <jwt_token>
+ * 2. x-user-id header or x-user-email header (active session fallback)
+ * 3. query param ?user_id=... or ?email=...
+ */
+async function authenticateUser(req, res, next) {
+  try {
+    let user = null;
+
+    // 1. Try JWT Bearer token
+    const authHeader = req.headers['authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7).trim();
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.id) {
+          const [rows] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [decoded.id]);
+          if (rows && rows.length > 0) user = rows[0];
+        } else if (decoded.email) {
+          const [rows] = await pool.query('SELECT * FROM users WHERE email = ? LIMIT 1', [decoded.email.toLowerCase().trim()]);
+          if (rows && rows.length > 0) user = rows[0];
+        }
+      } catch (jwtErr) {
+        // Token invalid or expired, continue to fallback checks
+      }
+    }
+
+    // 2. Fallback to session headers
+    if (!user && req.headers['x-user-id']) {
+      const rawId = req.headers['x-user-id'].toString().replace(/^U0*/i, '');
+      const numericId = parseInt(rawId, 10);
+      if (!isNaN(numericId)) {
+        const [rows] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [numericId]);
+        if (rows && rows.length > 0) user = rows[0];
+      }
+    }
+
+    if (!user && req.headers['x-user-email']) {
+      const cleanEmail = req.headers['x-user-email'].toString().toLowerCase().trim();
+      const [rows] = await pool.query('SELECT * FROM users WHERE email = ? LIMIT 1', [cleanEmail]);
+      if (rows && rows.length > 0) user = rows[0];
+    }
+
+    // 3. Fallback to query parameters
+    if (!user && req.query && req.query.user_id) {
+      const rawId = req.query.user_id.toString().replace(/^U0*/i, '');
+      const numericId = parseInt(rawId, 10);
+      if (!isNaN(numericId)) {
+        const [rows] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [numericId]);
+        if (rows && rows.length > 0) user = rows[0];
+      }
+    }
+
+    if (!user && req.query && req.query.email) {
+      const cleanEmail = req.query.email.toString().toLowerCase().trim();
+      const [rows] = await pool.query('SELECT * FROM users WHERE email = ? LIMIT 1', [cleanEmail]);
+      if (rows && rows.length > 0) user = rows[0];
+    }
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required. Please login.'
+      });
+    }
+
+    req.user = user;
+    next();
+  } catch (err) {
+    console.error('[Auth Middleware] Error:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error during authentication check.'
+    });
+  }
+}
+
+/**
+ * 7. POST /api/business-profiles
+ * Create a new Business Profile associated with the authenticated logged-in user.
+ * Body: { business_name, category, business_phone, country_code, full_address, locality, city, state, country, latitude, longitude, profile_image, images, about }
+ */
+app.post('/api/business-profiles', authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const {
+      business_name,
+      category = 'General Store',
+      business_phone,
+      country_code = '+91',
+      full_address,
+      locality = '',
+      city = '',
+      state = '',
+      country = 'India',
+      latitude = 0.0,
+      longitude = 0.0,
+      profile_image = '',
+      images = [],
+      about = ''
+    } = req.body;
+
+    if (!business_name || business_name.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Business name is required.'
+      });
+    }
+
+    if (!business_phone || business_phone.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Business phone number is required.'
+      });
+    }
+
+    if (!full_address || full_address.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Business address is required.'
+      });
+    }
+
+    const addr = extractAddressComponents(full_address, locality, city, state, country);
+    const imagesJson = Array.isArray(images) ? JSON.stringify(images) : (typeof images === 'string' ? images : '[]');
+    const primaryImage = profile_image || (Array.isArray(images) && images.length > 0 ? images[0] : '');
+
+    const insertQuery = `
+      INSERT INTO business_profile 
+      (user_id, business_name, category, business_phone, country_code, full_address, locality, city, state, country, latitude, longitude, profile_image, images, about)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const [result] = await pool.query(insertQuery, [
+      userId,
+      business_name.trim(),
+      (category || 'General Store').trim(),
+      business_phone.trim(),
+      (country_code || '+91').trim(),
+      addr.full_address,
+      addr.locality,
+      addr.city,
+      addr.state,
+      addr.country,
+      parseFloat(latitude) || 0.0,
+      parseFloat(longitude) || 0.0,
+      primaryImage,
+      imagesJson,
+      (about || '').trim()
+    ]);
+
+    const newBusinessId = result.insertId;
+    console.log(`[Business Profile] Created business_id ${newBusinessId} for user_id ${userId} ("${business_name.trim()}")`);
+
+    return res.status(201).json({
+      success: true,
+      message: 'Business profile created successfully!',
+      profile: {
+        business_id: newBusinessId,
+        business_profile_id: `BP${newBusinessId.toString().padStart(3, '0')}`,
+        user_id: userId,
+        owner_user_id: `U${userId.toString().padStart(3, '0')}`,
+        business_name: business_name.trim(),
+        category: (category || 'General Store').trim(),
+        business_phone: business_phone.trim(),
+        country_code: (country_code || '+91').trim(),
+        full_address: addr.full_address,
+        locality: addr.locality,
+        city: addr.city,
+        state: addr.state,
+        country: addr.country,
+        latitude: parseFloat(latitude) || 0.0,
+        longitude: parseFloat(longitude) || 0.0,
+        profile_image: primaryImage,
+        images: Array.isArray(images) ? images : [],
+        about: (about || '').trim(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('[Business Profile] Create error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error while creating business profile.'
+    });
+  }
+});
+
+/**
+ * 8. GET /api/business-profiles/my & GET /api/business-profiles
+ * Retrieve ONLY Business Profiles owned by the currently logged-in user.
+ * Query logic: SELECT * FROM business_profile WHERE user_id = logged_in_user_id;
+ */
+app.get(['/api/business-profiles/my', '/api/business-profiles'], authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const [rows] = await pool.query(
+      `SELECT * FROM business_profile 
+       WHERE user_id = ? 
+       ORDER BY created_at DESC, business_id DESC`,
+      [userId]
+    );
+
+    const profiles = rows.map(r => {
+      let parsedImages = [];
+      try {
+        parsedImages = r.images ? (typeof r.images === 'string' ? JSON.parse(r.images) : r.images) : [];
+      } catch (_) {
+        parsedImages = r.profile_image ? [r.profile_image] : [];
+      }
+      return {
+        business_id: r.business_id,
+        business_profile_id: `BP${r.business_id.toString().padStart(3, '0')}`,
+        user_id: r.user_id,
+        owner_user_id: `U${r.user_id.toString().padStart(3, '0')}`,
+        business_name: r.business_name,
+        category: r.category || 'General Store',
+        business_phone: r.business_phone,
+        country_code: r.country_code || '+91',
+        full_address: r.full_address,
+        locality: r.locality || '',
+        city: r.city || '',
+        state: r.state || '',
+        country: r.country || 'India',
+        latitude: parseFloat(r.latitude) || 0.0,
+        longitude: parseFloat(r.longitude) || 0.0,
+        profile_image: r.profile_image || (parsedImages.length > 0 ? parsedImages[0] : ''),
+        images: parsedImages,
+        about: r.about || '',
+        created_at: r.created_at,
+        updated_at: r.updated_at
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: profiles.length,
+      profiles
+    });
+  } catch (error) {
+    console.error('[Business Profile] Fetch user profiles error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error while fetching business profiles.'
+    });
+  }
+});
+
+/**
+ * 9. GET /api/business-profiles/:id
+ * Retrieve one specific Business Profile by unique Business ID.
+ */
+app.get('/api/business-profiles/:id', async (req, res) => {
+  try {
+    const rawId = req.params.id.toString().replace(/^BP0*/i, '');
+    const businessId = parseInt(rawId, 10);
+
+    if (isNaN(businessId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid business ID.'
+      });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT * FROM business_profile WHERE business_id = ? LIMIT 1`,
+      [businessId]
+    );
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Business profile not found.'
+      });
+    }
+
+    const r = rows[0];
+    let parsedImages = [];
+    try {
+      parsedImages = r.images ? (typeof r.images === 'string' ? JSON.parse(r.images) : r.images) : [];
+    } catch (_) {
+      parsedImages = r.profile_image ? [r.profile_image] : [];
+    }
+
+    return res.status(200).json({
+      success: true,
+      profile: {
+        business_id: r.business_id,
+        business_profile_id: `BP${r.business_id.toString().padStart(3, '0')}`,
+        user_id: r.user_id,
+        owner_user_id: `U${r.user_id.toString().padStart(3, '0')}`,
+        business_name: r.business_name,
+        category: r.category || 'General Store',
+        business_phone: r.business_phone,
+        country_code: r.country_code || '+91',
+        full_address: r.full_address,
+        locality: r.locality || '',
+        city: r.city || '',
+        state: r.state || '',
+        country: r.country || 'India',
+        latitude: parseFloat(r.latitude) || 0.0,
+        longitude: parseFloat(r.longitude) || 0.0,
+        profile_image: r.profile_image || (parsedImages.length > 0 ? parsedImages[0] : ''),
+        images: parsedImages,
+        about: r.about || '',
+        created_at: r.created_at,
+        updated_at: r.updated_at
+      }
+    });
+  } catch (error) {
+    console.error('[Business Profile] Fetch by ID error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error while fetching business profile.'
+    });
+  }
+});
+
+/**
+ * 10. PUT /api/business-profiles/:id
+ * Update only own Business Profile by Business ID (Ownership validation required).
+ */
+app.put('/api/business-profiles/:id', authenticateUser, async (req, res) => {
+  try {
+    const rawId = req.params.id.toString().replace(/^BP0*/i, '');
+    const businessId = parseInt(rawId, 10);
+    const userId = req.user.id;
+
+    if (isNaN(businessId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid business ID.'
+      });
+    }
+
+    // Ownership check: verify that this profile belongs to the authenticated user
+    const [existing] = await pool.query(
+      `SELECT * FROM business_profile WHERE business_id = ? LIMIT 1`,
+      [businessId]
+    );
+
+    if (!existing || existing.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Business profile not found.'
+      });
+    }
+
+    if (existing[0].user_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to modify this business profile.'
+      });
+    }
+
+    const {
+      business_name,
+      category,
+      business_phone,
+      country_code,
+      profile_image,
+      images,
+      about
+    } = req.body;
+
+    const current = existing[0];
+    const updatedName = business_name !== undefined ? business_name.trim() : current.business_name;
+    const updatedCat = category !== undefined ? category.trim() : current.category;
+    const updatedPhone = business_phone !== undefined ? business_phone.trim() : current.business_phone;
+    const updatedCc = country_code !== undefined ? country_code.trim() : current.country_code;
+    const updatedAbout = about !== undefined ? about.trim() : current.about;
+    
+    let updatedImagesJson = current.images;
+    let updatedPrimaryImg = current.profile_image;
+
+    if (images !== undefined) {
+      updatedImagesJson = Array.isArray(images) ? JSON.stringify(images) : (typeof images === 'string' ? images : '[]');
+      if (Array.isArray(images) && images.length > 0) {
+        updatedPrimaryImg = images[0];
+      }
+    }
+    if (profile_image !== undefined && profile_image.trim().length > 0) {
+      updatedPrimaryImg = profile_image.trim();
+    }
+
+    const updateQuery = `
+      UPDATE business_profile 
+      SET business_name = ?, category = ?, business_phone = ?, country_code = ?, profile_image = ?, images = ?, about = ?
+      WHERE business_id = ? AND user_id = ?
+    `;
+
+    await pool.query(updateQuery, [
+      updatedName,
+      updatedCat,
+      updatedPhone,
+      updatedCc,
+      updatedPrimaryImg,
+      updatedImagesJson,
+      updatedAbout,
+      businessId,
+      userId
+    ]);
+
+    console.log(`[Business Profile] Updated business_id ${businessId} by user_id ${userId}`);
+
+    let parsedImages = [];
+    try {
+      parsedImages = typeof updatedImagesJson === 'string' ? JSON.parse(updatedImagesJson) : updatedImagesJson;
+    } catch (_) {
+      parsedImages = updatedPrimaryImg ? [updatedPrimaryImg] : [];
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Business profile updated successfully!',
+      profile: {
+        business_id: businessId,
+        business_profile_id: `BP${businessId.toString().padStart(3, '0')}`,
+        user_id: userId,
+        owner_user_id: `U${userId.toString().padStart(3, '0')}`,
+        business_name: updatedName,
+        category: updatedCat,
+        business_phone: updatedPhone,
+        country_code: updatedCc,
+        full_address: current.full_address,
+        locality: current.locality,
+        city: current.city,
+        state: current.state,
+        country: current.country,
+        latitude: parseFloat(current.latitude) || 0.0,
+        longitude: parseFloat(current.longitude) || 0.0,
+        profile_image: updatedPrimaryImg,
+        images: parsedImages,
+        about: updatedAbout,
+        created_at: current.created_at,
+        updated_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('[Business Profile] Update error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error while updating business profile.'
+    });
+  }
+});
+
+/**
+ * 11. DELETE /api/business-profiles/:id
+ * Delete only own Business Profile by Business ID (Ownership validation required).
+ */
+app.delete('/api/business-profiles/:id', authenticateUser, async (req, res) => {
+  try {
+    const rawId = req.params.id.toString().replace(/^BP0*/i, '');
+    const businessId = parseInt(rawId, 10);
+    const userId = req.user.id;
+
+    if (isNaN(businessId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid business ID.'
+      });
+    }
+
+    const [existing] = await pool.query(
+      `SELECT * FROM business_profile WHERE business_id = ? LIMIT 1`,
+      [businessId]
+    );
+
+    if (!existing || existing.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Business profile not found.'
+      });
+    }
+
+    if (existing[0].user_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to delete this business profile.'
+      });
+    }
+
+    await pool.query(
+      `DELETE FROM business_profile WHERE business_id = ? AND user_id = ?`,
+      [businessId, userId]
+    );
+
+    console.log(`[Business Profile] Deleted business_id ${businessId} for user_id ${userId}`);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Business profile deleted successfully.'
+    });
+  } catch (error) {
+    console.error('[Business Profile] Delete error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error while deleting business profile.'
+    });
+  }
+});
+
 // 404 Handler
 app.use((req, res) => {
   res.status(404).json({
@@ -946,16 +1485,16 @@ async function startServer() {
   await initDatabase();
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`====================================================`);
-    console.log(`🚀 ADVT APP Server running on http://localhost:${PORT}`);
-    console.log(`📡 Endpoints:`);
-    console.log(`   - POST http://localhost:${PORT}/api/send-email-otp`);
-    console.log(`   - POST http://localhost:${PORT}/api/verify-email-otp`);
-    console.log(`   - POST http://localhost:${PORT}/api/register-user`);
-    console.log(`   - GET  http://localhost:${PORT}/api/user-profile`);
-    console.log(`   - PUT  http://localhost:${PORT}/api/update-profile`);
-    console.log(`   - GET  http://localhost:${PORT}/api/health`);
-    console.log(`====================================================`);
+    // console.log(`====================================================`);
+    // console.log(`🚀 ADVT APP Server running on http://localhost:${PORT}`);
+    // console.log(`📡 Endpoints:`);
+    // console.log(`   - POST http://localhost:${PORT}/api/send-email-otp`);
+    // console.log(`   - POST http://localhost:${PORT}/api/verify-email-otp`);
+    // console.log(`   - POST http://localhost:${PORT}/api/register-user`);
+    // console.log(`   - GET  http://localhost:${PORT}/api/user-profile`);
+    // console.log(`   - PUT  http://localhost:${PORT}/api/update-profile`);
+    // console.log(`   - GET  http://localhost:${PORT}/api/health`);
+    // console.log(`====================================================`);
   });
 }
 

@@ -22,7 +22,14 @@ class BusinessDetailsScreen extends StatelessWidget {
       );
     }
 
-    final relatedPosts = postService.allPosts.where((p) => p.businessProfileId == biz.businessProfileId).toList();
+    final cleanBizId = biz.businessProfileId.replaceAll(RegExp(r'[^0-9]'), '');
+    final relatedPosts = postService.allPosts.where((p) {
+      final pBizId = p.businessProfileId.replaceAll(RegExp(r'[^0-9]'), '');
+      final pNum = p.numericBusinessId?.toString();
+      return p.businessProfileId == biz.businessProfileId ||
+          (cleanBizId.isNotEmpty && pBizId == cleanBizId) ||
+          (cleanBizId.isNotEmpty && pNum == cleanBizId);
+    }).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),

@@ -27,6 +27,17 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentBottomNavIndex = 0;
   bool _isFilterDropdownOpen = false;
   final _postSearchController = TextEditingController();
+  bool _isInitialLoaded = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_isInitialLoaded) {
+      _isInitialLoaded = true;
+      final postService = Provider.of<PostService>(context, listen: false);
+      postService.fetchPosts();
+    }
+  }
 
   @override
   void dispose() {
@@ -91,6 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SafeArea(
         child: Stack(
           children: [
+            // Current Selected Tab Screen
             IndexedStack(
               index: _currentBottomNavIndex,
               children: [
@@ -128,7 +140,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final locationService = Provider.of<LocationService>(context);
     final postService = Provider.of<PostService>(context);
     final bizService = Provider.of<BusinessService>(context);
-    final notifService = Provider.of<NotificationService>(context);
     final searchService = Provider.of<SearchService>(context);
 
     final followedIds = bizService.followedBusinesses.map((b) => b.businessProfileId).toList();
@@ -218,9 +229,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           height: 40,
                           padding: const EdgeInsets.symmetric(horizontal: 14),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF9FAFB),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                            color: const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
                             children: [
@@ -229,14 +239,15 @@ class _HomeScreenState extends State<HomeScreen> {
                               Expanded(
                                 child: TextField(
                                   controller: _postSearchController,
-                                  onChanged: (val) => setState(() {}),
+                                  onChanged: (_) => setState(() {}),
+                                  style: const TextStyle(fontSize: 12.5, color: Color(0xFF111827)),
                                   decoration: const InputDecoration(
-                                    hintText: 'Search jobs, offers, posts...',
+                                    hintText: 'Search jobs, offers, stores...',
                                     hintStyle: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
                                     border: InputBorder.none,
                                     isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(vertical: 10),
                                   ),
-                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: Color(0xFF111827)),
                                 ),
                               ),
                               if (_postSearchController.text.isNotEmpty)
@@ -274,82 +285,87 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // Feed Content Area
+            // Feed Content Area with RefreshIndicator
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 96),
-                child: Column(
-                  children: [
-                    // Feed Heading Row
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          isSearchingPosts
-                              ? 'Matching Posts (${displayedPosts.length})'
-                              : (filterTitleMap[postService.activeFilter] ?? 'Recommended Feed'),
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF111827),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEEF2FF),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            isSearchingPosts ? 'SEARCH' : postService.activeFilter.toUpperCase(),
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  await postService.fetchPosts();
+                },
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 96),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Feed Title + Badge Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            filterTitleMap[postService.activeFilter] ?? 'Feed',
                             style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF4F46E5),
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF111827),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Feed Items or Empty State
-                    if (displayedPosts.isEmpty)
-                      EmptyStateWidget(
-                        icon: isSearchingPosts ? Icons.search_off_rounded : Icons.inbox_rounded,
-                        title: isSearchingPosts
-                            ? 'No posts found for "${_postSearchController.text.trim()}"'
-                            : 'No items match this filter',
-                        subtitle: isSearchingPosts
-                            ? 'Try searching by job role, offer deal, city, or company name.'
-                            : (postService.activeFilter == 'followed'
-                                ? "You haven't followed any business with posts yet."
-                                : 'Try choosing another category.'),
-                      )
-                    else
-                      ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: displayedPosts.length,
-                        separatorBuilder: (context, index) => const SizedBox(height: 14),
-                        itemBuilder: (context, index) {
-                          final item = displayedPosts[index];
-                          return PostCard(
-                            item: item,
-                            onView: () {
-                              if (item.type == 'job') {
-                                Navigator.pushNamed(context, '/job-details', arguments: item.postId);
-                              } else {
-                                Navigator.pushNamed(context, '/offer-details', arguments: item.postId);
-                              }
-                            },
-                            onToggleSave: () {
-                              postService.toggleSavePost(item.postId);
-                            },
-                          );
-                        },
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEEF2FF),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              isSearchingPosts ? 'SEARCH' : postService.activeFilter.toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF4F46E5),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                  ],
+                      const SizedBox(height: 14),
+
+                      // Feed Items or Empty State
+                      if (displayedPosts.isEmpty)
+                        EmptyStateWidget(
+                          icon: isSearchingPosts ? Icons.search_off_rounded : Icons.inbox_rounded,
+                          title: isSearchingPosts
+                              ? 'No posts found for "${_postSearchController.text.trim()}"'
+                              : 'No items match this filter',
+                          subtitle: isSearchingPosts
+                              ? 'Try searching by job role, offer deal, city, or company name.'
+                              : (postService.activeFilter == 'followed'
+                                  ? "You haven't followed any business with posts yet."
+                                  : 'Try choosing another category.'),
+                        )
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: displayedPosts.length,
+                          separatorBuilder: (context, index) => const SizedBox(height: 14),
+                          itemBuilder: (context, index) {
+                            final item = displayedPosts[index];
+                            return PostCard(
+                              item: item,
+                              onView: () {
+                                if (item.type == 'job') {
+                                  Navigator.pushNamed(context, '/job-details', arguments: item.postId);
+                                } else {
+                                  Navigator.pushNamed(context, '/offer-details', arguments: item.postId);
+                                }
+                              },
+                              onToggleSave: () {
+                                postService.toggleSavePost(item.postId);
+                              },
+                            );
+                          },
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),

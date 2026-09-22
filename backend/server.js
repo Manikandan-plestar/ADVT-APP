@@ -138,6 +138,42 @@ async function initDatabase() {
     await connection.query(createBusinessProfileTableQuery);
     console.log('[Database] Table "business_profile" is verified and ready.');
 
+    // 5. Table: posts (Posts for Jobs, Offers, and Coupons)
+    const createPostsTableQuery = `
+      CREATE TABLE IF NOT EXISTS posts (
+        post_id INT AUTO_INCREMENT PRIMARY KEY,
+        business_id INT NOT NULL,
+        user_id INT NOT NULL,
+        post_type ENUM('job', 'offer', 'coupon') NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        subtitle VARCHAR(255),
+        description TEXT,
+        coupon_code VARCHAR(50),
+        discount_label VARCHAR(100),
+        job_type VARCHAR(50),
+        experience VARCHAR(100),
+        validity VARCHAR(100),
+        badge_text VARCHAR(50),
+        terms TEXT,
+        target_location VARCHAR(255) NOT NULL,
+        target_city VARCHAR(100),
+        target_district VARCHAR(100),
+        target_state VARCHAR(100) DEFAULT 'Tamil Nadu',
+        target_locations_json TEXT,
+        images TEXT,
+        brand_logo TEXT,
+        is_active TINYINT DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_business_id (business_id),
+        INDEX idx_user_id (user_id),
+        INDEX idx_location_type (target_location, post_type, is_active),
+        INDEX idx_created (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `;
+    await connection.query(createPostsTableQuery);
+    console.log('[Database] Table "posts" is verified and ready.');
+
     // Auto-migrate/heal existing records if locality, city, or country are empty
     try {
       const [existingUsers] = await connection.query(
@@ -1466,6 +1502,490 @@ app.delete('/api/business-profiles/:id', authenticateUser, async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Internal server error while deleting business profile.'
+    });
+  }
+});
+
+// ==========================================
+// 5. POSTS CRUD & LOCATION FILTERING APIS
+// ==========================================
+
+function calculateTimeAgo(dateInput) {
+  if (!dateInput) return 'Just now';
+  const diffMs = Date.now() - new Date(dateInput).getTime();
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  if (diffMinutes < 1) return 'Just now';
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return `${Math.floor(diffDays / 7)}w ago`;
+}
+
+function formatPostRow(r) {
+  let parsedImages = [];
+  try {
+    parsedImages = r.images ? (typeof r.images === 'string' ? JSON.parse(r.images) : r.images) : [];
+  } catch (_) {
+    parsedImages = [];
+  }
+
+  let parsedTargetLocations = [];
+  try {
+    parsedTargetLocations = r.target_locations_json ? (typeof r.target_locations_json === 'string' ? JSON.parse(r.target_locations_json) : r.target_locations_json) : [];
+  } catch (_) {
+    parsedTargetLocations = [];
+  }
+
+  const prefix = r.post_type === 'coupon' ? 'C' : 'P';
+  const postIdStr = `${prefix}${r.post_id.toString().padStart(3, '0')}`;
+  const bizProfileIdStr = `BP${r.business_id.toString().padStart(3, '0')}`;
+
+  return {
+    post_id: r.post_id,
+    postId: postIdStr,
+    business_id: r.business_id,
+    businessProfileId: bizProfileIdStr,
+    user_id: r.user_id,
+    ownerUserId: `U${r.user_id.toString().padStart(3, '0')}`,
+    bizName: r.business_name || '',
+    type: r.post_type,
+    post_type: r.post_type,
+    title: r.title,
+    subtitle: r.subtitle || '',
+    description: r.description || '',
+    couponCode: r.coupon_code || null,
+    coupon_code: r.coupon_code || null,
+    discount: r.discount_label || null,
+    discount_label: r.discount_label || null,
+    jobType: r.job_type || null,
+    job_type: r.job_type || null,
+    exp: r.experience || null,
+    experience: r.experience || null,
+    validity: r.validity || null,
+    badgeText: r.badge_text || null,
+    badge_text: r.badge_text || null,
+    terms: r.terms || null,
+    targetLocation: r.target_location,
+    target_location: r.target_location,
+    target_city: r.target_city || null,
+    target_district: r.target_district || null,
+    target_state: r.target_state || 'Tamil Nadu',
+    targetLocationItems: parsedTargetLocations,
+    target_locations: parsedTargetLocations,
+    images: parsedImages,
+    brandLogo: r.brand_logo || r.business_profile_image || null,
+    brand_logo: r.brand_logo || r.business_profile_image || null,
+    is_active: r.is_active === 1,
+    timeAgo: calculateTimeAgo(r.created_at),
+    createdAt: r.created_at,
+    created_at: r.created_at,
+    updatedAt: r.updated_at,
+    updated_at: r.updated_at
+  };
+}
+
+/**
+ * 12. POST /api/posts
+ * Create a new Post (Job, Offer, Coupon) stored in a separate relational row.
+ */
+app.post('/api/posts', authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const {
+      business_id,
+      businessProfileId,
+      type,
+      post_type,
+      title,
+      subtitle,
+      description,
+      coupon_code,
+      couponCode,
+      discount,
+      discount_label,
+      job_type,
+      jobType,
+      exp,
+      experience,
+      validity,
+      badge_text,
+      badgeText,
+      terms,
+      target_location,
+      targetLocation,
+      target_city,
+      target_district,
+      target_state,
+      target_locations,
+      targetLocations,
+      images,
+      brand_logo,
+      brandLogo
+    } = req.body;
+
+    const rawBizId = business_id || businessProfileId;
+    if (!rawBizId) {
+      return res.status(400).json({ success: false, message: 'business_id is required.' });
+    }
+    const cleanBizId = parseInt(rawBizId.toString().replace(/^BP0*/i, ''), 10);
+    if (isNaN(cleanBizId)) {
+      return res.status(400).json({ success: false, message: 'Invalid business_id.' });
+    }
+
+    // Check ownership of the business profile
+    const [bizRows] = await pool.query(
+      `SELECT * FROM business_profile WHERE business_id = ? LIMIT 1`,
+      [cleanBizId]
+    );
+    if (!bizRows || bizRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Business profile not found.' });
+    }
+    if (bizRows[0].user_id !== userId) {
+      return res.status(403).json({ success: false, message: 'You do not own this business profile.' });
+    }
+
+    const postTypeVal = (type || post_type || 'offer').toLowerCase().trim();
+    if (!['job', 'offer', 'coupon'].includes(postTypeVal)) {
+      return res.status(400).json({ success: false, message: 'Invalid post type. Allowed: job, offer, coupon.' });
+    }
+
+    const postTitle = (title || '').trim();
+    if (!postTitle) {
+      return res.status(400).json({ success: false, message: 'Post title is required.' });
+    }
+
+    const postSubtitle = (subtitle || '').trim();
+    const postDesc = (description || '').trim();
+    const targetLoc = (target_location || targetLocation || bizRows[0].city || 'Tamil Nadu').trim();
+
+    // Prepare JSON arrays
+    let imagesJson = '[]';
+    if (images) {
+      imagesJson = Array.isArray(images) ? JSON.stringify(images) : (typeof images === 'string' ? images : '[]');
+    }
+    let targetLocsJson = '[]';
+    const locsList = target_locations || targetLocations;
+    if (locsList) {
+      targetLocsJson = Array.isArray(locsList) ? JSON.stringify(locsList) : (typeof locsList === 'string' ? locsList : '[]');
+    }
+
+    const postCouponCode = (coupon_code || couponCode || '').trim() || null;
+    const postDiscount = (discount || discount_label || (postTypeVal === 'coupon' ? postTitle : null));
+    const postJobType = (job_type || jobType || (postTypeVal === 'job' ? 'Full Time' : null));
+    const postExp = (exp || experience || (postTypeVal === 'job' ? 'Open' : null));
+    const postValidity = (validity || (postTypeVal === 'offer' ? 'Active now' : (postTypeVal === 'coupon' ? 'Active deal' : null)));
+    const postBadge = (badge_text || badgeText || (postTypeVal === 'coupon' ? 'Active' : null));
+    const postTerms = (terms || (postTypeVal === 'coupon' ? '1. Present this coupon in store or enter code during booking.' : null));
+    const postBrandLogo = brand_logo || brandLogo || bizRows[0].profile_image || null;
+
+    const insertQuery = `
+      INSERT INTO posts (
+        business_id, user_id, post_type, title, subtitle, description,
+        coupon_code, discount_label, job_type, experience, validity,
+        badge_text, terms, target_location, target_city, target_district,
+        target_state, target_locations_json, images, brand_logo, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    `;
+
+    const [result] = await pool.query(insertQuery, [
+      cleanBizId,
+      userId,
+      postTypeVal,
+      postTitle,
+      postSubtitle,
+      postDesc,
+      postCouponCode,
+      postDiscount,
+      postJobType,
+      postExp,
+      postValidity,
+      postBadge,
+      postTerms,
+      targetLoc,
+      target_city || null,
+      target_district || null,
+      target_state || 'Tamil Nadu',
+      targetLocsJson,
+      imagesJson,
+      postBrandLogo
+    ]);
+
+    const newPostId = result.insertId;
+
+    // Query back the newly inserted post with business join
+    const [insertedRows] = await pool.query(`
+      SELECT p.*, b.business_name, b.category AS business_category, b.city AS business_city, b.profile_image AS business_profile_image
+      FROM posts p
+      LEFT JOIN business_profile b ON p.business_id = b.business_id
+      WHERE p.post_id = ?
+      LIMIT 1
+    `, [newPostId]);
+
+    const formattedPost = formatPostRow(insertedRows[0]);
+
+    console.log(`[Posts] Created new post ID ${newPostId} (${postTypeVal}) for business_id ${cleanBizId} by user_id ${userId}`);
+
+    return res.status(201).json({
+      success: true,
+      message: 'Post created successfully!',
+      post: formattedPost
+    });
+  } catch (error) {
+    console.error('[Posts] Create post error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error while creating post.'
+    });
+  }
+});
+
+/**
+ * 13. GET /api/posts
+ * Query all active posts with optional filtering by type, location, business_id, user_id, search keyword.
+ */
+app.get('/api/posts', async (req, res) => {
+  try {
+    const { type, post_type, location, target_location, business_id, user_id, search, q } = req.query;
+
+    let query = `
+      SELECT p.*, b.business_name, b.category AS business_category, b.city AS business_city, b.profile_image AS business_profile_image
+      FROM posts p
+      LEFT JOIN business_profile b ON p.business_id = b.business_id
+      WHERE p.is_active = 1
+    `;
+    const params = [];
+
+    const pType = type || post_type;
+    if (pType && pType !== 'all') {
+      const types = pType.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+      if (types.length > 0) {
+        query += ` AND p.post_type IN (${types.map(() => '?').join(',')})`;
+        params.push(...types);
+      }
+    }
+
+    const pLoc = location || target_location;
+    if (pLoc && pLoc.trim().length > 0 && pLoc.toLowerCase() !== 'all') {
+      query += ` AND (p.target_location LIKE ? OR p.target_city LIKE ? OR p.target_district LIKE ? OR b.city LIKE ?)`;
+      const locPattern = `%${pLoc.trim()}%`;
+      params.push(locPattern, locPattern, locPattern, locPattern);
+    }
+
+    if (business_id) {
+      const cleanBizId = parseInt(business_id.toString().replace(/^BP0*/i, ''), 10);
+      if (!isNaN(cleanBizId)) {
+        query += ` AND p.business_id = ?`;
+        params.push(cleanBizId);
+      }
+    }
+
+    if (user_id) {
+      const cleanUserId = parseInt(user_id.toString().replace(/^U0*/i, ''), 10);
+      if (!isNaN(cleanUserId)) {
+        query += ` AND p.user_id = ?`;
+        params.push(cleanUserId);
+      }
+    }
+
+    const searchTerm = search || q;
+    if (searchTerm && searchTerm.trim().length > 0) {
+      query += ` AND (p.title LIKE ? OR p.subtitle LIKE ? OR p.description LIKE ? OR p.coupon_code LIKE ? OR b.business_name LIKE ?)`;
+      const sPattern = `%${searchTerm.trim()}%`;
+      params.push(sPattern, sPattern, sPattern, sPattern, sPattern);
+    }
+
+    query += ` ORDER BY p.created_at DESC`;
+
+    const [rows] = await pool.query(query, params);
+    const posts = rows.map(formatPostRow);
+
+    return res.status(200).json({
+      success: true,
+      count: posts.length,
+      posts
+    });
+  } catch (error) {
+    console.error('[Posts] Fetch posts error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error while fetching posts.'
+    });
+  }
+});
+
+/**
+ * 14. GET /api/posts/:id
+ * Retrieve single post details by post ID.
+ */
+app.get('/api/posts/:id', async (req, res) => {
+  try {
+    const rawId = req.params.id.toString().replace(/^[CP0]*/i, '');
+    const postId = parseInt(rawId, 10);
+
+    if (isNaN(postId)) {
+      return res.status(400).json({ success: false, message: 'Invalid post ID.' });
+    }
+
+    const [rows] = await pool.query(`
+      SELECT p.*, b.business_name, b.category AS business_category, b.city AS business_city, b.profile_image AS business_profile_image
+      FROM posts p
+      LEFT JOIN business_profile b ON p.business_id = b.business_id
+      WHERE p.post_id = ? AND p.is_active = 1
+      LIMIT 1
+    `, [postId]);
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Post not found.' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      post: formatPostRow(rows[0])
+    });
+  } catch (error) {
+    console.error('[Posts] Fetch post by ID error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error while fetching post.'
+    });
+  }
+});
+
+/**
+ * 15. PUT /api/posts/:id
+ * Update an existing post (Ownership verified).
+ */
+app.put('/api/posts/:id', authenticateUser, async (req, res) => {
+  try {
+    const rawId = req.params.id.toString().replace(/^[CP0]*/i, '');
+    const postId = parseInt(rawId, 10);
+    const userId = req.user.id;
+
+    if (isNaN(postId)) {
+      return res.status(400).json({ success: false, message: 'Invalid post ID.' });
+    }
+
+    const [existing] = await pool.query(`SELECT * FROM posts WHERE post_id = ? LIMIT 1`, [postId]);
+    if (!existing || existing.length === 0) {
+      return res.status(404).json({ success: false, message: 'Post not found.' });
+    }
+
+    if (existing[0].user_id !== userId) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to modify this post.' });
+    }
+
+    const {
+      title,
+      subtitle,
+      description,
+      coupon_code,
+      discount_label,
+      job_type,
+      experience,
+      validity,
+      badge_text,
+      terms,
+      target_location,
+      target_locations,
+      images
+    } = req.body;
+
+    const current = existing[0];
+    const updatedTitle = title !== undefined ? title.trim() : current.title;
+    const updatedSubtitle = subtitle !== undefined ? subtitle.trim() : current.subtitle;
+    const updatedDesc = description !== undefined ? description.trim() : current.description;
+    const updatedCoupon = coupon_code !== undefined ? (coupon_code ? coupon_code.trim() : null) : current.coupon_code;
+    const updatedDiscount = discount_label !== undefined ? (discount_label ? discount_label.trim() : null) : current.discount_label;
+    const updatedJobType = job_type !== undefined ? (job_type ? job_type.trim() : null) : current.job_type;
+    const updatedExp = experience !== undefined ? (experience ? experience.trim() : null) : current.experience;
+    const updatedValidity = validity !== undefined ? (validity ? validity.trim() : null) : current.validity;
+    const updatedBadge = badge_text !== undefined ? (badge_text ? badge_text.trim() : null) : current.badge_text;
+    const updatedTerms = terms !== undefined ? (terms ? terms.trim() : null) : current.terms;
+    const updatedLoc = target_location !== undefined ? target_location.trim() : current.target_location;
+
+    let updatedImages = current.images;
+    if (images !== undefined) {
+      updatedImages = Array.isArray(images) ? JSON.stringify(images) : (typeof images === 'string' ? images : '[]');
+    }
+
+    let updatedTargetLocs = current.target_locations_json;
+    if (target_locations !== undefined) {
+      updatedTargetLocs = Array.isArray(target_locations) ? JSON.stringify(target_locations) : (typeof target_locations === 'string' ? target_locations : '[]');
+    }
+
+    await pool.query(`
+      UPDATE posts
+      SET title = ?, subtitle = ?, description = ?, coupon_code = ?, discount_label = ?,
+          job_type = ?, experience = ?, validity = ?, badge_text = ?, terms = ?,
+          target_location = ?, target_locations_json = ?, images = ?
+      WHERE post_id = ? AND user_id = ?
+    `, [
+      updatedTitle, updatedSubtitle, updatedDesc, updatedCoupon, updatedDiscount,
+      updatedJobType, updatedExp, updatedValidity, updatedBadge, updatedTerms,
+      updatedLoc, updatedTargetLocs, updatedImages,
+      postId, userId
+    ]);
+
+    const [updatedRows] = await pool.query(`
+      SELECT p.*, b.business_name, b.category AS business_category, b.city AS business_city, b.profile_image AS business_profile_image
+      FROM posts p
+      LEFT JOIN business_profile b ON p.business_id = b.business_id
+      WHERE p.post_id = ?
+      LIMIT 1
+    `, [postId]);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Post updated successfully!',
+      post: formatPostRow(updatedRows[0])
+    });
+  } catch (error) {
+    console.error('[Posts] Update post error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error while updating post.'
+    });
+  }
+});
+
+/**
+ * 16. DELETE /api/posts/:id
+ * Delete post by ID (Ownership verified).
+ */
+app.delete('/api/posts/:id', authenticateUser, async (req, res) => {
+  try {
+    const rawId = req.params.id.toString().replace(/^[CP0]*/i, '');
+    const postId = parseInt(rawId, 10);
+    const userId = req.user.id;
+
+    if (isNaN(postId)) {
+      return res.status(400).json({ success: false, message: 'Invalid post ID.' });
+    }
+
+    const [existing] = await pool.query(`SELECT * FROM posts WHERE post_id = ? LIMIT 1`, [postId]);
+    if (!existing || existing.length === 0) {
+      return res.status(404).json({ success: false, message: 'Post not found.' });
+    }
+
+    if (existing[0].user_id !== userId) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to delete this post.' });
+    }
+
+    await pool.query(`DELETE FROM posts WHERE post_id = ? AND user_id = ?`, [postId, userId]);
+    console.log(`[Posts] Deleted post_id ${postId} by user_id ${userId}`);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Post deleted successfully.'
+    });
+  } catch (error) {
+    console.error('[Posts] Delete post error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error while deleting post.'
     });
   }
 });

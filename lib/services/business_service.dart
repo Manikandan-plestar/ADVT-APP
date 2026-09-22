@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'api_client.dart';
 import '../utils/text_utils.dart';
 import 'post_service.dart';
 
@@ -131,14 +132,11 @@ class BusinessService extends ChangeNotifier {
   String? _activeBusinessProfileId;
   bool _isLoading = false;
 
-  // Base URL configuration matching AuthService
-  String _baseUrl = !kIsWeb && Platform.isAndroid 
-      ? 'http://10.0.2.2:5000' 
-      : 'http://localhost:5000';
-
-  String get baseUrl => _baseUrl;
+  // Base URL configuration (delegated to unified ApiClient)
+  String get _baseUrl => ApiClient().baseUrl;
+  String get baseUrl => ApiClient().baseUrl;
   set baseUrl(String url) {
-    _baseUrl = url;
+    ApiClient().setBaseUrl(url);
     notifyListeners();
   }
 

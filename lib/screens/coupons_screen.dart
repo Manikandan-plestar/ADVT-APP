@@ -16,6 +16,7 @@ class _CouponsScreenState extends State<CouponsScreen> {
   String _selectedFilter = 'all'; // 'all', 'active', 'trending', 'electronics', 'healthcare', 'services', 'expired'
   final _searchController = TextEditingController();
   bool _isFilterOpen = false;
+  bool _isInitialLoaded = false;
 
   final Map<String, String> _filterLabels = {
     'all': 'All Coupons',
@@ -26,6 +27,16 @@ class _CouponsScreenState extends State<CouponsScreen> {
     'services': 'Services',
     'expired': 'Expired Deals',
   };
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_isInitialLoaded) {
+      _isInitialLoaded = true;
+      final postService = Provider.of<PostService>(context, listen: false);
+      postService.fetchPosts(postType: 'coupon');
+    }
+  }
 
   @override
   void dispose() {
@@ -241,9 +252,14 @@ class _CouponsScreenState extends State<CouponsScreen> {
 
               // Coupons Grid Feed
               Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.only(left: 16, right: 16, top: 6, bottom: 96),
-                  child: filteredCoupons.isEmpty
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    await postService.fetchPosts(postType: 'coupon');
+                  },
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(left: 16, right: 16, top: 6, bottom: 96),
+                    child: filteredCoupons.isEmpty
                       ? Container(
                           padding: const EdgeInsets.symmetric(vertical: 48),
                           alignment: Alignment.center,
@@ -405,6 +421,7 @@ class _CouponsScreenState extends State<CouponsScreen> {
                             );
                           },
                         ),
+                  ),
                 ),
               ),
             ],

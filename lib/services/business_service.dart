@@ -357,8 +357,18 @@ class BusinessService extends ChangeNotifier {
   }
 
   BusinessProfile? getBusinessById(String id) {
+    if (id.trim().isEmpty) return null;
+    final cleanId = id.replaceAll(RegExp(r'[^0-9]'), '');
     try {
-      return _businesses.firstWhere((b) => b.businessProfileId == id);
+      return _businesses.firstWhere((b) {
+        if (b.businessProfileId == id) return true;
+        if (cleanId.isNotEmpty) {
+          final bClean = b.businessProfileId.replaceAll(RegExp(r'[^0-9]'), '');
+          if (bClean == cleanId) return true;
+          if (b.numericBusinessId?.toString() == cleanId) return true;
+        }
+        return false;
+      });
     } catch (_) {
       return null;
     }

@@ -27,7 +27,7 @@ const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10);
 const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
 const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
-const FROM_EMAIL = process.env.FROM_EMAIL || `"ADVT App" <${SMTP_USER || 'no-reply@advtapp.com'}>`;
+const FROM_EMAIL = process.env.FROM_EMAIL || `"ADVT APP" <${SMTP_USER || 'no-reply@advtapp.com'}>`;
 
 const JWT_SECRET = process.env.JWT_SECRET || 'advt_app_jwt_super_secret_key_2026_xyz';
 const OTP_EXPIRY_MINUTES = parseInt(process.env.OTP_EXPIRY_MINUTES || '5', 10);
@@ -111,6 +111,14 @@ async function initDatabase() {
     `;
     await connection.query(createUsersTableQuery);
     console.log('[Database] Table "users" is verified and ready.');
+
+    // Seed test accounts if not already present
+    await connection.query(`
+      INSERT IGNORE INTO users (email, full_name, mobile_number, country_code, full_address, locality, city, state, country)
+      VALUES 
+        ('test1@gmail.com', 'Test User 1', '9876543210', '+91', '123 Test Street, Anna Nagar, Chennai, Tamil Nadu, India', 'Anna Nagar', 'Chennai', 'Tamil Nadu', 'India'),
+        ('test2@gmail.com', 'Test User 2', '9876543211', '+91', '456 Demo Avenue, T Nagar, Chennai, Tamil Nadu, India', 'T Nagar', 'Chennai', 'Tamil Nadu', 'India');
+    `);
 
     // 4. Table: business_profile (Business Profiles owned by users)
     const createBusinessProfileTableQuery = `
@@ -213,24 +221,24 @@ const cleanSmtpPass = (SMTP_PASS || '').replace(/\s+/g, '');
 
 const transporterConfig = SMTP_HOST === 'smtp.gmail.com'
   ? {
-      service: 'gmail',
-      auth: {
-        user: SMTP_USER,
-        pass: cleanSmtpPass,
-      },
-    }
+    service: 'gmail',
+    auth: {
+      user: SMTP_USER,
+      pass: cleanSmtpPass,
+    },
+  }
   : {
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
-      auth: {
-        user: SMTP_USER,
-        pass: cleanSmtpPass,
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    };
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_SECURE,
+    auth: {
+      user: SMTP_USER,
+      pass: cleanSmtpPass,
+    },
+    tls: {
+      rejectUnauthorized: false
+    }
+  };
 
 const transporter = nodemailer.createTransport(transporterConfig);
 
@@ -286,8 +294,12 @@ async function sendOtpEmail(email, otp) {
     throw new Error('SMTP credentials are not configured in backend .env file.');
   }
 
+  const senderAddress = FROM_EMAIL && FROM_EMAIL.includes('<') && FROM_EMAIL.includes('>')
+    ? FROM_EMAIL
+    : `"ADVT APP" <${SMTP_USER}>`;
+
   const mailOptions = {
-    from: FROM_EMAIL,
+    from: senderAddress,
     to: email,
     subject: `${otp} is your ADVT APP verification code`,
     text: `Your ADVT APP verification code is: ${otp}. It will expire in ${OTP_EXPIRY_MINUTES} minutes.`,
@@ -302,23 +314,20 @@ async function sendOtpEmail(email, otp) {
 // ==========================================
 // 4. HELPER FUNCTIONS & LOGIC
 // ==========================================
-const IS_DEV = process.env.NODE_ENV !== 'production';
-
-// Development-Only Test Accounts (Instant Bypass in Development)
-const DEV_TEST_ACCOUNTS = {
+// Test / Demo Accounts (Enabled in both Development & Production for Testing & App Store / Play Store Review)
+const TEST_ACCOUNTS = {
   'test1@gmail.com': '123456',
   'test2@gmail.com': '123456'
 };
 
-function isDevTestAccount(email) {
-  return IS_DEV && Object.prototype.hasOwnProperty.call(DEV_TEST_ACCOUNTS, (email || '').toLowerCase().trim());
+function isTestAccount(email) {
+  return Object.prototype.hasOwnProperty.call(TEST_ACCOUNTS, (email || '').toLowerCase().trim());
 }
 
-function verifyDevTestCredentials(email, otp) {
-  if (!IS_DEV) return false;
+function verifyTestCredentials(email, otp) {
   const cleanEmail = (email || '').toLowerCase().trim();
   const cleanOtp = (otp || '').toString().trim();
-  return DEV_TEST_ACCOUNTS[cleanEmail] === cleanOtp;
+  return TEST_ACCOUNTS[cleanEmail] === cleanOtp;
 }
 
 function generate6DigitOtp() {
@@ -444,9 +453,9 @@ async function checkRateLimit(email) {
 async function processAndSendOtp(email) {
   const cleanEmail = email.trim().toLowerCase();
 
-  // Development-only test accounts bypass real email sending
-  if (isDevTestAccount(cleanEmail)) {
-    console.log(`[Auth DEV] Recognized test account: ${cleanEmail}. Skipping email dispatch.`);
+  // Test accounts bypass real email sending (instant OTP 123456)
+  if (isTestAccount(cleanEmail)) {
+    console.log(`[Auth] Recognized test account: ${cleanEmail}. Skipping email dispatch (Fixed OTP: 123456).`);
     return {
       email: cleanEmail,
       expiresInSeconds: OTP_EXPIRY_MINUTES * 60
@@ -604,11 +613,11 @@ app.post(['/api/verify-email-otp', '/api/verify-otp'], async (req, res) => {
 
     let isVerified = false;
 
-    // A. Development Test Account Bypass (test1@gmail.com, test2@gmail.com with PIN 123456)
-    if (isDevTestAccount(cleanEmail)) {
-      if (verifyDevTestCredentials(cleanEmail, cleanOtp)) {
+    // A. Test Account Bypass (test1@gmail.com, test2@gmail.com with PIN 123456)
+    if (isTestAccount(cleanEmail)) {
+      if (verifyTestCredentials(cleanEmail, cleanOtp)) {
         isVerified = true;
-        console.log(`[Auth DEV] Test account authenticated: ${cleanEmail}`);
+        console.log(`[Auth] Test account authenticated successfully: ${cleanEmail}`);
       } else {
         return res.status(400).json({
           success: false,
@@ -1377,7 +1386,7 @@ app.put('/api/business-profiles/:id', authenticateUser, async (req, res) => {
     const updatedPhone = business_phone !== undefined ? business_phone.trim() : current.business_phone;
     const updatedCc = country_code !== undefined ? country_code.trim() : current.country_code;
     const updatedAbout = about !== undefined ? about.trim() : current.about;
-    
+
     let updatedImagesJson = current.images;
     let updatedPrimaryImg = current.profile_image;
 

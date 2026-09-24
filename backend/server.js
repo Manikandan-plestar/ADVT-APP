@@ -5,6 +5,9 @@ const mysql = require('mysql2/promise');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const http = require('http');
+const https = require('https');
 
 // Load environment variables from .env
 dotenv.config();
@@ -12,12 +15,12 @@ dotenv.config();
 // ==========================================
 // 1. CONFIGURATION & ENVIRONMENT VARIABLES
 // ==========================================
-const PORT = process.env.PORT || 5000;
+const PORT = parseInt(process.env.PORT || '5000', 10);
 const DB_HOST = process.env.DB_HOST || 'localhost';
 const DB_PORT = parseInt(process.env.DB_PORT || '3306', 10);
 const DB_USER = process.env.DB_USER || 'root';
 const DB_PASSWORD = process.env.DB_PASSWORD || '';
-const DB_NAME = process.env.DB_NAME || 'ADVT_APP';
+const DB_NAME = process.env.DB_NAME || 'advt_app';
 
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10);
@@ -1999,23 +2002,36 @@ app.use((req, res) => {
 });
 
 // ==========================================
-// 6. BOOTSTRAP SERVER
+// 6. BOOTSTRAP SERVER (AUTO HTTP / HTTPS)
 // ==========================================
+const privKeyPath = '/etc/letsencrypt/live/apps.plestarinc.com/privkey.pem';
+const certPath = '/etc/letsencrypt/live/apps.plestarinc.com/fullchain.pem';
+
 async function startServer() {
   await initDatabase();
 
-  app.listen(PORT, '0.0.0.0', () => {
-    // console.log(`====================================================`);
-    // console.log(`🚀 ADVT APP Server running on http://localhost:${PORT}`);
-    // console.log(`📡 Endpoints:`);
-    // console.log(`   - POST http://localhost:${PORT}/api/send-email-otp`);
-    // console.log(`   - POST http://localhost:${PORT}/api/verify-email-otp`);
-    // console.log(`   - POST http://localhost:${PORT}/api/register-user`);
-    // console.log(`   - GET  http://localhost:${PORT}/api/user-profile`);
-    // console.log(`   - PUT  http://localhost:${PORT}/api/update-profile`);
-    // console.log(`   - GET  http://localhost:${PORT}/api/health`);
-    // console.log(`====================================================`);
-  });
+  if (fs.existsSync(privKeyPath) && fs.existsSync(certPath)) {
+    // Production HTTPS Server (Google Cloud Console / Live)
+    const credentials = {
+      key: fs.readFileSync(privKeyPath, 'utf8'),
+      cert: fs.readFileSync(certPath, 'utf8')
+    };
+    const httpsPort = PORT === 5000 ? 3003 : PORT;
+    const httpsServer = https.createServer(credentials, app);
+    httpsServer.listen(httpsPort, '0.0.0.0', () => {
+      console.log(`====================================================`);
+      console.log(`🚀 ADVT APP Live Server running on https://apps.plestarinc.com:${httpsPort}`);
+      console.log(`====================================================`);
+    });
+  } else {
+    // Development HTTP Server (Local PC)
+    const httpServer = http.createServer(app);
+    httpServer.listen(PORT, '0.0.0.0', () => {
+      console.log(`====================================================`);
+      console.log(`🚀 ADVT APP Local Server running on http://localhost:${PORT}`);
+      console.log(`====================================================`);
+    });
+  }
 }
 
 startServer();

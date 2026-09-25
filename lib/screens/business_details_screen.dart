@@ -65,18 +65,19 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
     final bizService = Provider.of<BusinessService>(context, listen: false);
     final postService = Provider.of<PostService>(context, listen: false);
 
-    // Fetch user businesses if not present
-    if (bizService.getBusinessById(widget.businessProfileId) == null) {
-      if (authService.currentUser.userId.isNotEmpty || authService.currentUser.email.isNotEmpty) {
-        await bizService.fetchUserBusinesses(
-          userId: authService.currentUser.userId,
-          authToken: authService.currentUser.authToken,
-          userEmail: authService.currentUser.email,
-        );
-      }
+    // 1. Fetch this specific business profile directly from backend
+    await bizService.fetchBusinessById(widget.businessProfileId);
+
+    // 2. Also fetch user's businesses if logged in
+    if (authService.currentUser.userId.isNotEmpty) {
+      bizService.fetchUserBusinesses(
+        userId: authService.currentUser.userId,
+        authToken: authService.currentUser.authToken,
+        userEmail: authService.currentUser.email,
+      );
     }
 
-    // Fetch posts for this business
+    // 3. Fetch posts for this business
     await postService.fetchPosts(businessId: widget.businessProfileId);
   }
 
@@ -283,8 +284,64 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
     );
   }
 
+  void _confirmDeleteBusiness(BuildContext context, BusinessProfile biz) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final bizService = Provider.of<BusinessService>(context, listen: false);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Business Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Text('Are you sure you want to permanently delete "${biz.displayName}"? All associated posts will also be deleted. This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF6B7280))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final success = await bizService.deleteBusinessProfile(
+                biz.businessProfileId,
+                callerUserId: authService.currentUser.userId,
+                authToken: authService.currentUser.authToken,
+                userEmail: authService.currentUser.email,
+              );
+              if (mounted) {
+                if (success) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Business profile deleted successfully.'),
+                      backgroundColor: Color(0xFF10B981),
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Failed to delete business profile.'),
+                      backgroundColor: Color(0xFFEF4444),
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
     final bizService = Provider.of<BusinessService>(context);
     final postService = Provider.of<PostService>(context);
 
@@ -323,6 +380,21 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
           child: Text('Business profile not found', style: TextStyle(color: Color(0xFF6B7280))),
         ),
       );
+    }
+
+    // Owner vs Visitor detection based on authenticated User ID
+    final currentUserId = authService.currentUser.userId;
+    bool isOwner = false;
+    if (authService.isLoggedIn && currentUserId.isNotEmpty) {
+      final cleanCurrent = currentUserId.replaceAll(RegExp(r'[^0-9]'), '');
+      final cleanOwner = biz.ownerUserId.replaceAll(RegExp(r'[^0-9]'), '');
+      if (biz.ownerUserId == currentUserId) {
+        isOwner = true;
+      } else if (cleanCurrent.isNotEmpty && cleanOwner.isNotEmpty && cleanCurrent == cleanOwner) {
+        isOwner = true;
+      } else if (biz.numericUserId != null && cleanCurrent.isNotEmpty && biz.numericUserId.toString() == cleanCurrent) {
+        isOwner = true;
+      }
     }
 
     // Posts associated with this specific Business Profile ID
@@ -393,36 +465,18 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
                       )
                     : const SizedBox.shrink(),
               ),
-              // Requirement 1 & 2: Show Edit & + icons in sticky header ONLY after scrolling down
+              // Show Edit icon in sticky header ONLY to the owner after scrolling down
               actions: [
                 AnimatedOpacity(
                   opacity: _showStickyHeader ? 1.0 : 0.0,
                   duration: const Duration(milliseconds: 200),
-                  child: _showStickyHeader
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined, color: Color(0xFF4F46E5), size: 20),
-                              tooltip: 'Edit Profile',
-                              onPressed: () {
-                                Navigator.pushNamed(context, '/edit-biz', arguments: biz.businessProfileId);
-                              },
-                            ),
-                            IconButton(
-                              icon: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFEEF2FF),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(Icons.add_rounded, color: Color(0xFF4F46E5), size: 20),
-                              ),
-                              tooltip: 'Create Post',
-                              onPressed: () => _showPostTypeMenu(context, biz),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
+                  child: (_showStickyHeader && isOwner)
+                      ? IconButton(
+                          icon: const Icon(Icons.edit_outlined, color: Color(0xFF4F46E5), size: 20),
+                          tooltip: 'Edit Profile',
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/edit-biz', arguments: biz.businessProfileId);
+                          },
                         )
                       : const SizedBox.shrink(),
                 ),
@@ -556,75 +610,59 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
                     const SizedBox(height: 20),
 
                     // --------------------------------------------------------
-                    // Requirement: Edit and Post buttons with matching border lines
+                    // Owner Modification Controls vs Visitor Controls
                     // --------------------------------------------------------
-                    Row(
-                      children: [
-                        // Edit Action (Border color matches text color)
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              Navigator.pushNamed(context, '/edit-biz', arguments: biz.businessProfileId);
-                            },
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFF374151), width: 1.5),
+                    if (isOwner) ...[
+                      // Owner View: + Post (clean text/icon style without background or delete icon)
+                      InkWell(
+                        onTap: () => _showPostTypeMenu(context, biz),
+                        borderRadius: BorderRadius.circular(8),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.add_rounded, size: 22, color: Color(0xFF4F46E5)),
+                              SizedBox(width: 6),
+                              Text(
+                                'Post',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF4F46E5),
+                                ),
                               ),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.edit_outlined, size: 18, color: Color(0xFF374151)),
-                                  SizedBox(width: 6),
-                                  Text(
-                                    'Edit',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF374151),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            ],
                           ),
                         ),
-
-                        const SizedBox(width: 14),
-
-                        // Post Action (Border color matches text color)
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => _showPostTypeMenu(context, biz),
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFF4F46E5), width: 1.5),
-                              ),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.add_circle_outline_rounded, size: 20, color: Color(0xFF4F46E5)),
-                                  SizedBox(width: 6),
-                                  Text(
-                                    'Post',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF4F46E5),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                      ),
+                    ] else ...[
+                      // Visitor View: Full-width Follow Action (No Subscribe, No Edit/Delete/Post)
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => bizService.toggleFollow(biz.businessProfileId),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: biz.isFollowed ? const Color(0xFFF3F4F6) : const Color(0xFF4F46E5),
+                            foregroundColor: biz.isFollowed ? const Color(0xFF374151) : Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: biz.isFollowed ? const BorderSide(color: Color(0xFFE5E7EB)) : BorderSide.none,
                             ),
                           ),
+                          icon: Icon(
+                            biz.isFollowed ? Icons.check_rounded : Icons.add_rounded,
+                            size: 18,
+                          ),
+                          label: Text(
+                            biz.isFollowed ? 'Following' : 'Follow',
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                          ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
 
                     const SizedBox(height: 16),
                     const Divider(thickness: 1, color: Color(0xFFF1F5F9)),
@@ -704,65 +742,78 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
                             BoxShadow(color: Color(0x04000000), blurRadius: 6, offset: Offset(0, 2)),
                           ],
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Post Images if available
-                            if (post.images.isNotEmpty)
-                              ClipRRect(
-                                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                                child: CyclingPostImage(
-                                  images: post.images,
-                                  width: double.infinity,
-                                  height: 160,
-                                  fit: BoxFit.cover,
-                                  borderRadius: BorderRadius.zero,
-                                ),
-                              ),
-
-                            Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Top Row: Badge, Time & Delete Icon
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: badgeBg,
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          badgeText,
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w800,
-                                            color: badgeFg,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ),
-                                      Row(
-                                        children: [
-                                          Text(
-                                            post.formattedPostTime,
-                                            style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444), size: 18),
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(),
-                                            tooltip: 'Delete Post',
-                                            onPressed: () => _confirmDeletePost(context, post, biz.businessProfileId),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () {
+                            if (post.type == 'job') {
+                              Navigator.pushNamed(context, '/job-details', arguments: post.postId);
+                            } else if (post.type == 'coupon') {
+                              Navigator.pushNamed(context, '/coupon-details', arguments: post.postId);
+                            } else {
+                              Navigator.pushNamed(context, '/offer-details', arguments: post.postId);
+                            }
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Post Images if available
+                              if (post.images.isNotEmpty)
+                                ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                                  child: CyclingPostImage(
+                                    images: post.images,
+                                    width: double.infinity,
+                                    height: 160,
+                                    fit: BoxFit.cover,
+                                    borderRadius: BorderRadius.zero,
                                   ),
+                                ),
+
+                              Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Top Row: Badge, Time & (Owner only) Delete Icon
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: badgeBg,
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            badgeText,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w800,
+                                              color: badgeFg,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ),
+                                        Row(
+                                          children: [
+                                            Text(
+                                              post.formattedPostTime,
+                                              style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+                                            ),
+                                            if (isOwner) ...[
+                                              const SizedBox(width: 6),
+                                              IconButton(
+                                                icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444), size: 18),
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(),
+                                                tooltip: 'Delete Post',
+                                                onPressed: () => _confirmDeletePost(context, post, biz.businessProfileId),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ],
+                                    ),
                                   const SizedBox(height: 8),
 
                                   // Post Title
@@ -828,7 +879,8 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
                             ),
                           ],
                         ),
-                      );
+                      ),
+                    );
                     },
                     childCount: relatedPosts.length,
                   ),

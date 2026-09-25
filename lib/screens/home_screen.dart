@@ -35,7 +35,16 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_isInitialLoaded) {
       _isInitialLoaded = true;
       final postService = Provider.of<PostService>(context, listen: false);
+      final bizService = Provider.of<BusinessService>(context, listen: false);
+      final authService = Provider.of<AuthService>(context, listen: false);
       postService.fetchPosts();
+      if (authService.currentUser.userId.isNotEmpty) {
+        bizService.fetchUserBusinesses(
+          userId: authService.currentUser.userId,
+          authToken: authService.currentUser.authToken,
+          userEmail: authService.currentUser.email,
+        );
+      }
     }
   }
 

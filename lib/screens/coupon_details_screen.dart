@@ -18,6 +18,23 @@ class CouponDetailsScreen extends StatefulWidget {
 class _CouponDetailsScreenState extends State<CouponDetailsScreen> {
   bool _showRouteMap = false;
   bool _isCopied = false;
+  bool _isBizFetched = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_isBizFetched) {
+      _isBizFetched = true;
+      final postService = Provider.of<PostService>(context, listen: false);
+      final bizService = Provider.of<BusinessService>(context, listen: false);
+      final coupon = postService.getCouponById(widget.postId);
+      if (coupon != null && coupon.businessProfileId.isNotEmpty) {
+        if (bizService.getBusinessById(coupon.businessProfileId) == null) {
+          bizService.fetchBusinessById(coupon.businessProfileId);
+        }
+      }
+    }
+  }
 
   void _copyCouponCode(String code) {
     Clipboard.setData(ClipboardData(text: code));
@@ -57,6 +74,11 @@ class _CouponDetailsScreenState extends State<CouponDetailsScreen> {
 
     // Identify the exact Business Profile via unique BusinessProfileId
     final biz = bizService.getBusinessById(coupon.businessProfileId);
+    final bizName = (biz != null && biz.name.isNotEmpty) ? biz.name : (coupon.bizName.isNotEmpty ? coupon.bizName : 'Verified Store');
+    final bizCategory = (biz != null && biz.category.isNotEmpty) ? biz.category : 'Coupons & Deals';
+    final bizLocation = (biz != null && biz.location.isNotEmpty) ? biz.location : (coupon.targetLocation ?? 'Nearby');
+    final bizImage = (biz != null && biz.image.isNotEmpty) ? biz.image : (coupon.brandLogo ?? (coupon.images.isNotEmpty ? coupon.images.first : ''));
+    final isFollowed = biz != null ? biz.isFollowed : bizService.followedBusinesses.any((b) => b.businessProfileId == coupon.businessProfileId);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -85,151 +107,152 @@ class _CouponDetailsScreenState extends State<CouponDetailsScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // Business / Shop Header
-            if (biz != null)
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0xFFF3F4F6)),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x04000000),
-                      blurRadius: 8,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              Navigator.pushNamed(
-                                context,
-                                '/business-details',
-                                arguments: biz.businessProfileId,
-                              );
-                            },
-                            child: Row(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: Image.network(
-                                    biz.image,
-                                    width: 46,
-                                    height: 46,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) => Container(
-                                      width: 46,
-                                      height: 46,
+            // Top Posted Profile Detail Card
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFFF3F4F6)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x06000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: bizImage.isNotEmpty
+                                  ? Image.network(
+                                      bizImage,
+                                      width: 48,
+                                      height: 48,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => Container(
+                                        width: 48,
+                                        height: 48,
+                                        color: const Color(0xFFEEF2FF),
+                                        child: const Icon(Icons.store_rounded, color: Color(0xFF4F46E5), size: 24),
+                                      ),
+                                    )
+                                  : Container(
+                                      width: 48,
+                                      height: 48,
                                       color: const Color(0xFFEEF2FF),
-                                      child: const Icon(Icons.store_rounded, color: Color(0xFF4F46E5)),
+                                      child: const Icon(Icons.store_rounded, color: Color(0xFF4F46E5), size: 24),
                                     ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
                                     children: [
-                                      Row(
-                                        children: [
-                                          Flexible(
-                                            child: Text(
-                                              biz.name,
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.bold,
-                                                color: Color(0xFF111827),
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
+                                      Flexible(
+                                        child: Text(
+                                          bizName,
+                                          style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF111827),
                                           ),
-                                          const SizedBox(width: 4),
-                                          const Icon(Icons.verified_rounded, size: 14, color: Color(0xFF3B82F6)),
-                                        ],
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        biz.category,
-                                        style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(Icons.verified_rounded, size: 16, color: Color(0xFF3B82F6)),
                                     ],
                                   ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: () => bizService.toggleFollow(biz.businessProfileId),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: biz.isFollowed ? const Color(0xFFF3F4F6) : const Color(0xFFEEF2FF),
-                            foregroundColor: biz.isFollowed ? const Color(0xFF374151) : const Color(0xFF4F46E5),
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: Text(
-                            biz.isFollowed ? '✓ Following' : '+ Follow',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    const Divider(height: 1, color: Color(0xFFF3F4F6)),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              const Icon(Icons.location_on_rounded, size: 14, color: Color(0xFFEF4444)),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  biz.location,
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF4B5563)),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    bizCategory,
+                                    style: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _showRouteMap = !_showRouteMap;
-                            });
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF059669),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          icon: const Icon(Icons.navigation_rounded, size: 12),
-                          label: const Text('Route', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () => bizService.toggleFollow(coupon.businessProfileId),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isFollowed ? const Color(0xFFF3F4F6) : const Color(0xFFEEF2FF),
+                          foregroundColor: isFollowed ? const Color(0xFF374151) : const Color(0xFF4F46E5),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                      ],
-                    ),
-                  ],
-                ),
+                        child: Text(
+                          isFollowed ? '✓ Following' : '+ Follow',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            const Icon(Icons.location_on_rounded, size: 16, color: Color(0xFFEF4444)),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                bizLocation,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF4B5563)),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _showRouteMap = !_showRouteMap;
+                          });
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF059669),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.navigation_rounded, size: 13),
+                        label: const Text('Route', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ],
               ),
+            ),
 
             if (_showRouteMap) ...[
               const SizedBox(height: 14),

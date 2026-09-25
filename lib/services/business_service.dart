@@ -257,6 +257,38 @@ class BusinessService extends ChangeNotifier {
     return getUserBusinesses(cleanUserId);
   }
 
+  /// Fetch a single business profile by ID from backend MySQL database
+  Future<BusinessProfile?> fetchBusinessById(String businessProfileId) async {
+    if (businessProfileId.trim().isEmpty) return null;
+    final cleanId = businessProfileId.replaceAll(RegExp(r'[^0-9]'), '');
+    final url = Uri.parse('$_baseUrl/api/business-profiles/${cleanId.isNotEmpty ? cleanId : businessProfileId}');
+
+    try {
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        if (data['success'] == true && data['profile'] != null) {
+          final fetched = BusinessProfile.fromJson(data['profile'] as Map<String, dynamic>);
+          final existingIdx = _businesses.indexWhere((b) =>
+              b.businessProfileId == fetched.businessProfileId ||
+              (cleanId.isNotEmpty && b.businessProfileId.replaceAll(RegExp(r'[^0-9]'), '') == cleanId));
+          if (existingIdx != -1) {
+            _businesses[existingIdx] = fetched;
+          } else {
+            _businesses.add(fetched);
+          }
+          notifyListeners();
+          return fetched;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('[BusinessService] Error fetching business by ID: $e');
+      }
+    }
+    return getBusinessById(businessProfileId);
+  }
+
   /// Purpose: Create a new Business Profile in MySQL database associated with logged-in user (Requirements 1-8)
   Future<BusinessProfile> createBusinessProfile({
     required String ownerUserId,

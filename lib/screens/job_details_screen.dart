@@ -17,6 +17,23 @@ class JobDetailsScreen extends StatefulWidget {
 
 class _JobDetailsScreenState extends State<JobDetailsScreen> {
   bool _showRouteMap = false;
+  bool _isBizFetched = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_isBizFetched) {
+      _isBizFetched = true;
+      final postService = Provider.of<PostService>(context, listen: false);
+      final bizService = Provider.of<BusinessService>(context, listen: false);
+      final post = postService.getPostById(widget.postId);
+      if (post != null && post.businessProfileId.isNotEmpty) {
+        if (bizService.getBusinessById(post.businessProfileId) == null) {
+          bizService.fetchBusinessById(post.businessProfileId);
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +49,11 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     }
 
     final biz = bizService.getBusinessById(post.businessProfileId);
+    final bizName = (biz != null && biz.name.isNotEmpty) ? biz.name : (post.bizName.isNotEmpty ? post.bizName : 'Verified Employer');
+    final bizCategory = (biz != null && biz.category.isNotEmpty) ? biz.category : 'Hiring & Careers';
+    final bizLocation = (biz != null && biz.location.isNotEmpty) ? biz.location : (post.targetLocation ?? 'Nearby');
+    final bizImage = (biz != null && biz.image.isNotEmpty) ? biz.image : (post.brandLogo ?? (post.images.isNotEmpty ? post.images.first : ''));
+    final isFollowed = biz != null ? biz.isFollowed : bizService.followedBusinesses.any((b) => b.businessProfileId == post.businessProfileId);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -60,117 +82,162 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // Business Profile Header Box
-            if (biz != null)
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0xFFF3F4F6)),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: Image.network(
-                                biz.image,
-                                width: 46,
-                                height: 46,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  width: 46,
-                                  height: 46,
-                                  color: const Color(0xFFEEF2FF),
-                                  child: const Icon(Icons.store_rounded, color: Color(0xFF4F46E5)),
-                                ),
+            // Top Posted Profile Detail Card
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFFF3F4F6)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x06000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            Navigator.pushNamed(
+                              context,
+                              '/business-details',
+                              arguments: post.businessProfileId,
+                            );
+                          },
+                          child: Row(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: bizImage.isNotEmpty
+                                    ? Image.network(
+                                        bizImage,
+                                        width: 48,
+                                        height: 48,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) => Container(
+                                          width: 48,
+                                          height: 48,
+                                          color: const Color(0xFFEEF2FF),
+                                          child: const Icon(Icons.store_rounded, color: Color(0xFF4F46E5), size: 24),
+                                        ),
+                                      )
+                                    : Container(
+                                        width: 48,
+                                        height: 48,
+                                        color: const Color(0xFFEEF2FF),
+                                        child: const Icon(Icons.store_rounded, color: Color(0xFF4F46E5), size: 24),
+                                      ),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      biz.name,
-                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF111827)),
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            bizName,
+                                            style: const TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF111827),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        const Icon(Icons.verified_rounded, size: 16, color: Color(0xFF3B82F6)),
+                                      ],
                                     ),
-                                    const SizedBox(width: 4),
-                                    const Icon(Icons.verified_rounded, size: 14, color: Color(0xFF3B82F6)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      bizCategory,
+                                      style: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ],
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  biz.category,
-                                  style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        ElevatedButton(
-                          onPressed: () => bizService.toggleFollow(biz.businessProfileId),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: biz.isFollowed ? const Color(0xFFF3F4F6) : const Color(0xFFEEF2FF),
-                            foregroundColor: biz.isFollowed ? const Color(0xFF374151) : const Color(0xFF4F46E5),
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: Text(
-                            biz.isFollowed ? '✓ Following' : '+ Follow',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    const Divider(height: 1, color: Color(0xFFF3F4F6)),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () => bizService.toggleFollow(post.businessProfileId),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isFollowed ? const Color(0xFFF3F4F6) : const Color(0xFFEEF2FF),
+                          foregroundColor: isFollowed ? const Color(0xFF374151) : const Color(0xFF4F46E5),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text(
+                          isFollowed ? '✓ Following' : '+ Follow',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Row(
                           children: [
-                            const Icon(Icons.location_on_rounded, size: 14, color: Color(0xFFEF4444)),
+                            const Icon(Icons.location_on_rounded, size: 16, color: Color(0xFFEF4444)),
                             const SizedBox(width: 4),
-                            Text(
-                              biz.location,
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF4B5563)),
+                            Expanded(
+                              child: Text(
+                                bizLocation,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF4B5563)),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ],
                         ),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _showRouteMap = !_showRouteMap;
-                            });
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF059669),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          icon: const Icon(Icons.navigation_rounded, size: 12),
-                          label: const Text('Route', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _showRouteMap = !_showRouteMap;
+                          });
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF059669),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                      ],
-                    ),
-                  ],
-                ),
+                        icon: const Icon(Icons.navigation_rounded, size: 13),
+                        label: const Text('Route', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ],
               ),
+            ),
 
             // Live Driving Route Collapsible Card
             if (_showRouteMap) ...[

@@ -126,6 +126,8 @@ class AuthService extends ChangeNotifier {
               isLoggedIn: true,
               authToken: data['auth_token'] as String?,
             );
+            ApiClient().setAuthToken(_user.authToken);
+            ApiClient().setCurrentUser(userId: _user.userId, email: _user.email);
             notifyListeners();
           }
         }
@@ -307,11 +309,15 @@ class AuthService extends ChangeNotifier {
             isLoggedIn: true,
             authToken: token,
           );
+          ApiClient().setAuthToken(token);
+          ApiClient().setCurrentUser(userId: _user.userId, email: _user.email);
         } else {
           // Prepare new user state with verified email
           _user.email = email;
           _user.authToken = token;
           _user.isLoggedIn = false; // Registration required before logged in
+          ApiClient().setAuthToken(token);
+          ApiClient().setCurrentUser(email: email);
         }
         await _saveSession();
       }
@@ -398,6 +404,9 @@ class AuthService extends ChangeNotifier {
           isLoggedIn: true,
           authToken: token ?? _user.authToken,
         );
+
+        ApiClient().setAuthToken(_user.authToken);
+        ApiClient().setCurrentUser(userId: _user.userId, email: _user.email);
 
         await _saveSession();
       }
@@ -548,6 +557,7 @@ class AuthService extends ChangeNotifier {
     );
     _isOtpSent = false;
     _pendingEmail = null;
+    ApiClient().clearSession();
 
     try {
       final file = await _getSessionFile();

@@ -683,7 +683,7 @@ app.post(['/api/verify-email-otp', '/api/verify-otp'], async (req, res) => {
     const token = jwt.sign(
       { email: cleanEmail, isVerified: true },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '30d' }
     );
 
     if (userRows && userRows.length > 0) {
